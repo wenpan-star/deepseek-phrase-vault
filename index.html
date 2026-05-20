@@ -2,493 +2,1006 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>船舶物料申请系统 · 灵韵旗舰版 v8.0</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%231a4d8c' stroke='%23f0c674' stroke-width='2'/%3E%3Cpath fill='%23f0c674' d='M50,12 L53,28 L68,20 L62,35 L78,35 L68,47 L78,60 L62,60 L68,75 L53,67 L50,83 L47,67 L32,75 L38,60 L22,60 L32,47 L22,35 L38,35 L32,20 L47,28 Z'/%3E%3Ccircle cx='50' cy='47' r='8' fill='%23ffffff'/%3E%3C/svg%3E">
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+    <title>DeepSeek 语句工坊 | 搜索 · 持久标签</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='80'%3E📦%3C/text%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         * {
-            box-sizing: border-box;
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
         }
         body {
-            background: linear-gradient(145deg, #eef4fa 0%, #dae6f0 100%);
-            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
-            padding: 24px 28px;
-            color: #152c3c;
-            line-height: 1.4;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
+            background: linear-gradient(145deg, #f0f4f8 0%, #e6edf2 100%);
+            height: 100vh;
+            overflow: hidden;
+            color: #1a2c3e;
         }
-        @media (max-width: 768px) {
-            body { padding: 12px 14px; }
-            input, select, button, textarea { font-size: 14px; }
-        }
-        button, .add-btn, .delete-item, .delete-inv, .icon-btn {
-            cursor: pointer;
-            transition: all 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-            border-radius: 48px;
-            font-weight: 500;
-            border: none;
-            background: transparent;
-        }
-        button:active { transform: scale(0.96); }
-        button:hover { filter: brightness(0.96); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); transform: translateY(-1px); }
-        .app-container {
-            max-width: 1600px;
+        .app-layout {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            max-width: 1800px;
             margin: 0 auto;
+            background: rgba(255,255,255,0.4);
         }
-        .card {
-            background: rgba(255, 255, 255, 0.96);
-            backdrop-filter: blur(2px);
-            border-radius: 32px;
-            box-shadow: 0 18px 32px -12px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.02);
-            padding: 1.3rem 1.6rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.7);
-            transition: all 0.25s;
-        }
-        .card:hover {
-            box-shadow: 0 24px 38px -14px rgba(0, 0, 0, 0.16);
-        }
-        @media (max-width: 768px) {
-            .card { padding: 1rem 1rem; margin-bottom: 1rem; }
-        }
-        .card-header {
-            font-weight: 700;
-            font-size: 1.28rem;
-            margin-bottom: 1.1rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 12px;
-            padding-left: 18px;
-            border-left: 6px solid #2c7da0;
-            background: linear-gradient(90deg, #f6fbfe, transparent);
-            letter-spacing: -0.3px;
-        }
-        .nav-tabs {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 28px;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.85);
+        .sidebar {
+            width: 68px;
+            background: rgba(255,255,255,0.94);
             backdrop-filter: blur(12px);
-            border-radius: 80px;
-            padding: 6px 22px;
-            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.04);
-        }
-        .tab-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .version-corner {
-            font-size: 0.7rem;
-            background: #e1edf5;
-            padding: 5px 18px;
-            border-radius: 40px;
-            font-weight: 600;
-            border: 1px solid #cbdde8;
-            color: #1e5a7a;
-        }
-        .tab-btn {
-            background: transparent;
-            border: none;
-            font-size: 0.9rem;
-            font-weight: 600;
-            padding: 8px 24px;
-            border-radius: 60px;
-            color: #2c5a7a;
-            transition: all 0.2s;
-        }
-        .tab-btn.active {
-            background: #2c7da0;
-            color: white;
-            box-shadow: 0 6px 14px rgba(44, 125, 160, 0.3);
-        }
-        .tab-pane {
-            display: none;
-            animation: fadeIn 0.25s ease;
-        }
-        .tab-pane.active-pane {
-            display: block;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .flex-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 14px;
-            align-items: flex-end;
-        }
-        .form-group {
+            border-right: 1px solid rgba(0,0,0,0.06);
+            transition: width 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
             display: flex;
             flex-direction: column;
-            gap: 5px;
-            min-width: 140px;
-            flex: 1 1 auto;
+            overflow: hidden;
+            z-index: 20;
+            flex-shrink: 0;
         }
-        .form-group label {
-            font-size: 0.68rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: #2c7da0;
+        .sidebar.expanded {
+            width: 260px;
         }
-        input, select, button, textarea {
-            border-radius: 40px;
-            padding: 8px 18px;
-            border: 1px solid #d0e2ee;
-            font-size: 0.85rem;
-            background: white;
-            transition: all 0.2s;
-            outline: none;
+        @media (hover: hover) and (pointer: fine) {
+            .sidebar:not(.touch-mode):hover {
+                width: 260px;
+            }
         }
-        input:focus, select:focus, textarea:focus {
-            border-color: #2c7da0;
-            box-shadow: 0 0 0 3px rgba(44, 125, 160, 0.15);
-        }
-        button.primary {
-            background: #2c7da0;
-            color: white;
-            box-shadow: 0 2px 8px rgba(44, 125, 160, 0.25);
-        }
-        button.success {
-            background: #2e8b57;
-            color: white;
-            box-shadow: 0 2px 8px rgba(46, 139, 86, 0.2);
-        }
-        button.outline {
-            background: white;
-            border: 1px solid #2c7da0;
-            color: #2c7da0;
-        }
-        .danger-btn {
-            background: #fff7f5;
-            border: 1px solid #f0bcb4;
-            color: #c0392b;
-        }
-        .material-table-wrapper, .table-wrapper {
-            overflow-x: auto;
-            border-radius: 28px;
-            max-height: 620px;
-            overflow-y: auto;
-            border: 1px solid #e2ebf2;
-            background: white;
-        }
-        .req-table, .material-search-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8rem;
-            min-width: 860px;
-        }
-        .req-table th, .req-table td, .material-search-table th, .material-search-table td {
-            padding: 12px 8px;
-            border-bottom: 1px solid #ecf3f7;
-            vertical-align: middle;
-        }
-        .req-table tr:hover td, .material-search-table tr:hover td {
-            background: #f9fdfe;
-        }
-        .req-table th, .material-search-table th {
-            background: #f5fafd;
-            font-weight: 700;
-            color: #16445f;
-            position: sticky;
-            top: 0;
-            border-bottom: 2px solid #deeaf1;
-            font-size: 0.78rem;
-        }
-        .sort-indicator {
-            margin-left: 6px;
-            font-size: 0.65rem;
-        }
-        .resize-handle {
-            position: absolute;
-            right: 0;
-            top: 0;
-            width: 6px;
-            height: 100%;
-            cursor: col-resize;
-            background: transparent;
-            z-index: 10;
-        }
-        .resize-handle:hover {
-            background: #2c7da0;
-            opacity: 0.35;
-        }
-        .qty-input, .stock-manual-input, .remark-input {
-            width: 100%;
-            text-align: center;
-            padding: 5px 8px;
-            border-radius: 32px;
-            font-size: 0.75rem;
-        }
-        .delete-item {
-            font-size: 1.2rem;
-            opacity: 0.65;
-        }
-        .delete-item:hover {
-            opacity: 1;
-            color: #e74c3c;
-        }
-        .status-bar {
-            font-size: 0.7rem;
-            background: #e8f1f7;
-            padding: 6px 20px;
-            border-radius: 48px;
-            display: inline-block;
-            margin-top: 12px;
-            color: #2c7da0;
-        }
-        .quick-add-area {
-            background: #fafefe;
-            border-radius: 32px;
-            padding: 14px 22px;
-            margin-bottom: 22px;
-            border: 1px solid #e2edf2;
-        }
-        .quick-results {
-            max-height: 270px;
-            overflow-y: auto;
-            margin-top: 14px;
-            border-radius: 28px;
-            background: white;
-            border: 1px solid #e0eef5;
-        }
-        .batch-area {
-            background: #fbfeff;
-            padding: 16px 22px;
-            border-radius: 32px;
-            margin-bottom: 20px;
-            border: 1px solid #e2edf2;
-        }
-        .pagination-bar {
+        .sidebar-header {
+            padding: 20px 16px 12px 16px;
             display: flex;
-            justify-content: flex-end;
             align-items: center;
             gap: 12px;
-            margin-top: 20px;
-            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            margin-bottom: 8px;
         }
-        .pagination-bar button {
-            background: white;
-            border: 1px solid #cde0ea;
-            border-radius: 32px;
-            padding: 4px 14px;
-            font-size: 0.75rem;
+        .sidebar-logo {
+            background: linear-gradient(135deg, #0a5b8c, #1e88e5);
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
         }
-        .library-count-badge {
-            background: #e9f2f8;
-            border-radius: 48px;
-            padding: 5px 18px;
+        .sidebar-logo i { font-size: 22px; color: white; }
+        .sidebar-title {
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-weight: 700;
+            font-size: 1rem;
+            background: linear-gradient(135deg, #1a5d7d, #0e3a50);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+        .sidebar.expanded .sidebar-title, .sidebar:hover .sidebar-title { opacity: 1; }
+        .tags-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 10px 16px 10px;
+        }
+        .tag-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            margin: 4px 0;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+        }
+        .tag-item i { width: 24px; font-size: 1rem; color: #5b7e9e; flex-shrink: 0; }
+        .tag-name {
+            flex: 1;
+            font-weight: 500;
+            font-size: 0.85rem;
+            color: #2c4c6c;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .sidebar.expanded .tag-name, .sidebar:hover .tag-name { opacity: 1; }
+        .tag-badge {
+            background: #e2ebf3;
+            border-radius: 30px;
+            padding: 2px 8px;
             font-size: 0.7rem;
             font-weight: 600;
+            color: #2c6b9a;
+            opacity: 0;
         }
-        .btn-icon-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .auth-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(14px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-        }
-        .auth-card {
-            background: white;
-            border-radius: 56px;
-            padding: 2rem 2rem 2.2rem;
-            width: 90%;
-            max-width: 420px;
-            box-shadow: 0 40px 60px -20px rgba(0, 0, 0, 0.5);
-            text-align: center;
-        }
-        .progress-bar-container {
-            background: #e0eaf1;
-            border-radius: 24px;
-            height: 8px;
-            margin-top: 8px;
-            overflow: hidden;
-        }
-        .progress-bar-fill {
-            background: #2c7da0;
-            width: 0%;
-            height: 100%;
-            transition: width 0.2s;
-        }
-        .lang-toggle-btn {
-            min-width: 130px;
-            justify-content: center;
-            gap: 8px;
+        .sidebar.expanded .tag-badge, .sidebar:hover .tag-badge { opacity: 1; }
+        .tag-item.active { background: #e3f2fd; }
+        .tag-item.active i, .tag-item.active .tag-name { color: #1976d2; font-weight: 600; }
+        .delete-tag-icon {
+            opacity: 0;
+            background: rgba(0,0,0,0.06);
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
             display: inline-flex;
             align-items: center;
-            font-weight: 600;
-        }
-        /* 美化滚动条 */
-        ::-webkit-scrollbar {
-            width: 7px;
-            height: 7px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #e4edf3;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #b7cfdf;
-            border-radius: 10px;
-        }
-        .inline-edit {
+            justify-content: center;
+            font-size: 12px;
             cursor: pointer;
-            border-bottom: 1px dashed #90b8cf;
+            color: #8facc0;
+        }
+        .tag-item:hover .delete-tag-icon { opacity: 1; }
+        .delete-tag-icon:hover { background: #ffcdd2; color: #d32f2f; }
+        .add-tag-btn {
+            margin: 12px 10px;
+            background: #eef2fa;
+            border-radius: 40px;
+            padding: 10px;
+            text-align: center;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #1976d2;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .add-tag-btn span { display: none; }
+        .sidebar.expanded .add-tag-btn span, .sidebar:hover .add-tag-btn span { display: inline; }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: rgba(250,252,254,0.4);
+        }
+        .app-header {
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: blur(8px);
+            padding: 0.7rem 1.8rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            gap: 12px;
+        }
+        .logo-area { display: flex; align-items: center; gap: 12px; }
+        .logo-icon {
+            background: linear-gradient(135deg, #0a5b8c, #1e88e5);
+            width: 44px; height: 44px; border-radius: 18px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .title h1 {
+            font-size: 1.5rem; font-weight: 700;
+            background: linear-gradient(135deg, #1a5d7d, #0e3a50);
+            background-clip: text; -webkit-background-clip: text; color: transparent;
+        }
+        .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .stat-badge {
+            background: #eef2fa; border-radius: 100px; padding: 6px 14px;
+            font-size: 0.8rem; font-weight: 500;
+        }
+        .btn {
+            border: none; background: white; padding: 6px 16px; border-radius: 40px;
+            font-weight: 500; font-size: 0.8rem; display: inline-flex; align-items: center;
+            gap: 8px; cursor: pointer; border: 1px solid rgba(0,0,0,0.06);
+            background: #ffffffcc; backdrop-filter: blur(2px);
+        }
+        .btn-primary { background: #1976d2; color: white; border: none; }
+        /* 搜索框样式 */
+        .search-wrapper {
+            display: flex;
+            align-items: center;
+            background: white;
+            border-radius: 40px;
+            padding: 0.1rem 0.8rem;
+            border: 1px solid rgba(0,0,0,0.08);
+            gap: 8px;
+            flex: 1;
+            min-width: 180px;
+            max-width: 280px;
+        }
+        .search-wrapper i {
+            color: #8ba0ae;
+            font-size: 0.9rem;
+        }
+        .search-wrapper input {
+            border: none;
+            padding: 8px 0;
+            font-size: 0.85rem;
+            background: transparent;
+            outline: none;
+            width: 100%;
+        }
+        .search-wrapper input::placeholder {
+            color: #b8c7d4;
+        }
+        .clear-search {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: #8ba0ae;
+            padding: 4px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .clear-search:hover {
+            background: #edf4fa;
+            color: #1976d2;
+        }
+        @media (max-width: 700px) {
+            .app-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .search-wrapper {
+                max-width: none;
+                width: 100%;
+            }
+            .header-actions {
+                justify-content: flex-start;
+            }
+        }
+        .main-list { flex: 1; overflow-y: auto; padding: 1.2rem 1.8rem; }
+        .statements-grid { display: flex; flex-direction: column; gap: 12px; }
+        .statement-card {
+            background: white; border-radius: 24px; padding: 0.9rem 1.2rem;
+            display: flex; align-items: center; gap: 1rem;
+            border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+            cursor: grab;
+        }
+        .statement-card:active { cursor: grabbing; }
+        .card-index {
+            font-weight: 600; min-width: 40px; text-align: center;
+            background: #f0f4f9; padding: 4px 0; border-radius: 40px; font-size: 0.85rem;
+        }
+        .card-content { flex: 1; font-size: 0.95rem; line-height: 1.45; font-weight: 500; word-break: break-word; }
+        .card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .icon-btn {
+            background: transparent; border: none; font-size: 1rem; width: 36px; height: 36px;
+            border-radius: 40px; display: inline-flex; align-items: center; justify-content: center;
+            cursor: pointer; color: #56748c; transition: 0.15s;
+        }
+        .icon-btn:hover { background: #edf4fa; color: #1976d2; }
+        .delete-btn:hover { background: #fee8e8; color: #d32f2f; }
+        .add-section {
+            background: rgba(255,255,255,0.85); backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(0,0,0,0.05); padding: 0.8rem 1.8rem 1.2rem;
+        }
+        .add-wrapper {
+            display: flex; gap: 12px; background: white; border-radius: 60px;
+            padding: 0.1rem 0.1rem 0.1rem 1.5rem; border: 1px solid #e2edf3;
+        }
+        .add-wrapper input { flex: 1; border: none; padding: 12px 0; font-size: 0.9rem; background: transparent; outline: none; }
+        .add-wrapper button { background: #1976d2; border-radius: 50px; padding: 8px 26px; border: none; color: white; font-weight: 600; cursor: pointer; }
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(5px);
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-card { background: white; width: 90%; max-width: 640px; border-radius: 36px; padding: 1.8rem; }
+        .tag-select-list { max-height: 300px; overflow-y: auto; margin: 1rem 0; }
+        .tag-option {
+            padding: 12px 16px; background: #f8fafc; border-radius: 60px; margin: 8px 0;
+            cursor: pointer; transition: all 0.1s; font-weight: 500; display: flex; align-items: center; gap: 10px;
+        }
+        .tag-option:hover { background: #e3f2fd; }
+        .toast-msg {
+            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+            background: #1f2f3ad9; backdrop-filter: blur(12px); color: white;
+            padding: 10px 24px; border-radius: 80px; font-size: 0.85rem; z-index: 1100;
+            opacity: 0; transition: opacity 0.2s; pointer-events: none;
+        }
+        .empty-state { text-align: center; padding: 3rem; background: #ffffffaa; border-radius: 48px; color: #8ba0ae; }
+        .version-footer { text-align: center; font-size: 0.7rem; color: #8ba0ae; padding: 6px 0 10px; background: rgba(255,255,255,0.5); }
+        .sortable-drag { opacity: 0.3; background: #e3f2fd; }
+        .search-highlight {
+            background-color: #fff3c9;
+            border-radius: 6px;
+            padding: 0 2px;
+        }
+        @media (max-width: 700px) {
+            .sidebar { width: 56px; }
+            .sidebar.expanded { width: 220px; }
+            .main-list { padding: 1rem; }
+            .card-actions .icon-btn { width: 40px; height: 40px; }
+            .modal-card { max-width: 92%; padding: 1.2rem; }
         }
     </style>
 </head>
 <body>
-<div id="authOverlay" class="auth-overlay" style="display:flex;">
-    <div class="auth-card">
-        <h2>⚓ 船舶物料系统 · 旗舰版</h2>
-        <div id="authTitle">🔐 首次使用：设定主密码 (AES-256)</div>
-        <input type="password" id="authPassword1" placeholder="请输入密码" autocomplete="off" style="margin:12px 0 8px;">
-        <input type="password" id="authPassword2" placeholder="再次输入密码" autocomplete="off" style="display:block; margin-bottom:12px;">
-        <button id="authSubmitBtn" style="background:#2c7da0;color:white;padding:12px;width:100%;">确认并解锁</button>
-        <div id="authError" class="error-msg" style="color:#c0392b; margin-top:12px;"></div>
-        <div class="status-bar" style="margin-top:18px;">🔒 大容量引擎 · 支持15W+条目 · 安全加密</div>
+<div class="app-layout" id="appLayout">
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo"><i class="fas fa-tags"></i></div>
+            <div class="sidebar-title">语料标签</div>
+        </div>
+        <div class="tags-scroll" id="sidebarTagsList"></div>
+        <div class="add-tag-btn" id="sidebarAddTagBtn"><i class="fas fa-plus-circle"></i><span>新建标签</span></div>
+    </div>
+    <div class="main-content">
+        <div class="app-header">
+            <div class="logo-area"><div class="logo-icon"><i class="fas fa-shield-alt"></i></div><div class="title"><h1>DeepSeek 语句工坊</h1></div></div>
+            <div class="search-wrapper">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="搜索语句..." autocomplete="off">
+                <button class="clear-search" id="clearSearchBtn" style="display: none;"><i class="fas fa-times-circle"></i></button>
+            </div>
+            <div class="header-actions">
+                <div class="stat-badge" id="statCounter"><i class="fas fa-layer-group"></i> <span>0</span> 条</div>
+                <button class="btn btn-outline" id="exportBtn"><i class="fas fa-download"></i> 导出全局</button>
+                <label class="btn btn-outline" for="importFileInput"><i class="fas fa-upload"></i> 导入全局/旧档</label>
+                <input type="file" id="importFileInput" accept=".json" style="display: none;">
+                <button class="btn btn-outline" id="resetDefaultBtn"><i class="fas fa-lightbulb"></i> 重置全局</button>
+            </div>
+        </div>
+        <div class="main-list" id="mainListContainer"><div id="statementsList" class="statements-grid"></div></div>
+        <div class="add-section">
+            <div class="add-wrapper">
+                <input type="text" id="newStatementInput" placeholder="✍️ 写下新的语句或提示词..." autocomplete="off">
+                <button id="addStatementBtn"><i class="fas fa-plus-circle"></i> 添加</button>
+            </div>
+        </div>
+        <div class="version-footer">版本 v4.3.0  |  AES-256-GCM 加密  |  实时搜索  |  标签持久保存</div>
     </div>
 </div>
-<div class="app-container" id="mainApp" style="display:none;">
-    <div class="nav-tabs">
-        <div class="tab-buttons">
-            <button class="tab-btn active" data-tab="reqTab">📋 申请单管理</button>
-            <button class="tab-btn" data-tab="materialTab">📦 智能物料库</button>
-        </div>
-        <div style="display:flex;gap:12px;align-items:center;">
-            <button id="changePasswordBtn" class="outline">🔑 修改密码</button>
-            <button id="showAuditLogBtn" class="outline">📜 审计日志</button>
-            <button id="toggleLangBtn" class="outline lang-toggle-btn">🌐 切换至中文库</button>
-            <div class="version-corner">v8.0 · 星瀚效能版</div>
-        </div>
-    </div>
-    <!-- 申请单模块 -->
-    <div id="reqTab" class="tab-pane active-pane">
-        <div class="card">
-            <div class="card-header"><span>📋 物料申请单 · 专业工作区</span><div class="btn-icon-group"><span id="itemCountBadge" class="library-count-badge">0 项</span><button id="exportExcelBtn" class="success">📎 导出申请单</button><button id="importReqFromExcelBtn" class="outline">📂 导入申请单</button></div></div>
-            <div class="flex-row"><div class="form-group"><label>申请次序号</label><input type="text" id="reqSerial" placeholder="PO-2025-001" style="width:220px;"></div><div class="form-group"><label>申请人</label><select id="applicant" style="width:150px;"><option value="C/O">C/O</option><option value="2/O" selected>2/O</option><option value="3/O">3/O</option><option value="C/E">C/E</option><option value="2/E">2/E</option><option value="3/E">3/E</option><option value="4/E">4/E</option><option value="E/E">E/E</option></select></div><div class="form-group"><label>申请时间</label><input type="datetime-local" id="applyTime"></div><div class="btn-icon-group" style="margin-left:auto;"><button id="loadReqBtn" class="primary">📂 加载</button><button id="newReqBtn" class="primary">✨ 新建</button><button id="manualSaveBtn" class="success">💾 保存</button></div></div>
-            <div class="flex-row" style="margin-top:12px;"><div class="form-group" style="min-width:260px;"><label>📜 历史申请单</label><div style="display:flex;gap:8px;"><select id="historyReqSelect" style="flex:1;"></select><button id="historyDeleteIconBtn" class="danger-btn">🗑️</button></div></div><button id="refreshHistoryBtn" class="outline">🔄 刷新</button></div>
-            <div class="status-bar" id="autoSaveStatus">✅ 安全加密 · 实时保存已就绪 · 支持超大数据集</div>
-        </div>
-        <div class="card"><div class="card-header">🔍 闪电添加物料 (IMPA快速检索)</div><div class="quick-add-area"><div class="flex-row"><div style="flex:3;"><input type="text" id="quickSearchInput" placeholder="IMPA码 / 物料描述" style="width:100%;"></div><button id="clearQuickSearchBtn" class="outline">🗑️ 清空</button></div><div id="quickSearchResults" class="quick-results" style="display:none;"><table style="width:100%"><thead><tr><th>IMPA</th><th>物料描述</th><th>规格型号</th><th>单位</th><th></th></tr></thead><tbody id="quickSearchTbody"></tbody></table></div></div>
-            <div class="req-search-bar"><div class="form-group req-search-input"><label>🔍 过滤当前申请单</label><div style="display:flex;gap:8px;"><input type="text" id="reqSearchKeyword" placeholder="关键词"><select id="reqSearchFieldSelect"><option value="all">全部字段</option><option value="impa">IMPA</option><option value="description">物料描述</option></select></div></div><button id="clearSearchBtn" class="outline">🗑️ 清除</button><button id="batchDeleteReqBtn" class="danger-btn">🗑️ 删除选中</button></div>
-            <div class="table-wrapper"><table class="req-table" id="reqTable"><colgroup id="reqColgroup"></colgroup><thead><tr><th class="checkbox-col"><input type="checkbox" id="selectAllCheckbox"></th><th>#</th><th data-sort="impa">IMPA <span class="sort-indicator"></span></th><th data-sort="description">物料描述 <span class="sort-indicator"></span></th><th data-sort="spec">规格型号 <span class="sort-indicator"></span></th><th data-sort="unit">单位 <span class="sort-indicator"></span></th><th data-sort="stock">库存(手动) <span class="sort-indicator"></span></th><th data-sort="quantity">申请数量 <span class="sort-indicator"></span></th><th data-sort="remark">备注 <span class="sort-indicator"></span></th><th>操作</th></tr></thead><tbody id="reqTableBody"><tr><td colspan="10">暂无物料，请从搜索区添加</td></tr></tbody></table></div>
-        </div>
-    </div>
-    <!-- 物料库模块 -->
-    <div id="materialTab" class="tab-pane">
-        <div class="card"><div class="card-header"><span>📦 智能物料库 (IMPA 中/英双库)</span><div class="btn-icon-group"><button id="importEnBtn" class="primary">📎 导入英文库</button><button id="importZhBtn" class="primary">📎 导入中文库</button><button id="backupAllDataBtn" class="success">💾 加密备份(大数据优化)</button><button id="restoreBackupBtn" class="outline">📂 恢复备份</button></div></div>
-            <div id="importProgressArea" style="display:none;" class="status-bar"><div>导入进度: <span id="importProgressText">0%</span></div><div class="progress-bar-container"><div id="importProgressFill" class="progress-bar-fill"></div></div></div>
-            <div class="flex-row"><div class="form-group search-input" style="flex:3"><label>🔍 搜索物料 (支持15万+条目)</label><div style="display:flex;gap:8px;"><input type="text" id="searchKeyword" placeholder="关键词"><select id="searchFieldSelect"><option value="all">全部字段</option><option value="impa">IMPA</option><option value="description">物料描述</option><option value="unit">单位</option><option value="remark">备注</option></select></div></div><div><span id="currentLibraryCount" class="library-count-badge">0 条</span></div></div>
-            <div class="batch-area"><div style="font-weight:600;margin-bottom:8px;">➕ 快速添加自定义物料</div><div class="flex-row"><input type="text" id="newImpa" placeholder="IMPA *" style="width:120px;"><input type="text" id="newDesc" placeholder="物料描述 *" style="min-width:160px;"><input type="text" id="newSpec" placeholder="规格" style="width:140px;"><input type="text" id="newUnit" placeholder="单位" style="width:80px;"><input type="text" id="newRemark" placeholder="备注" style="width:120px;"><button id="addCustomMaterialBtn" class="primary">➕ 添加</button></div><div class="batch-import-row"><span style="font-size:0.7rem;">📎 批量追加物料 (Excel) 支持备注列</span><button id="batchAddMaterialBtn" class="outline">📂 选择Excel (追加/覆盖)</button><span class="status-bar" style="margin:0;padding:2px 12px;">列: IMPA,物料描述,规格,单位,备注</span></div></div>
-            <div class="material-table-wrapper"><table class="material-search-table" id="materialSearchTable"><colgroup id="materialColgroup"></colgroup><thead><tr><th>序号</th><th>IMPA</th><th>物料描述</th><th>规格型号</th><th>单位</th><th>备注</th><th>操作</th></tr></thead><tbody id="materialSearchBody"></tbody></table></div>
-            <div class="pagination-bar" id="materialPagination"><button id="matFirstPage" disabled>⏮️ 首页</button><button id="matPrevPage" disabled>◀ 上一页</button><span>第 <span id="matCurrentPageSpan">1</span> / <span id="matTotalPagesSpan">1</span> 页</span><button id="matNextPage" disabled>下一页 ▶</button><button id="matLastPage" disabled>尾页 ⏭️</button><select id="matPageSizeSelect"><option value="30">30条/页</option><option value="50">50条/页</option><option value="100" selected>100条/页</option><option value="200">200条/页</option></select></div>
-        </div>
-    </div>
-</div>
+
+<!-- 编辑模态框 -->
+<div id="editModal" class="modal"><div class="modal-card"><h3><i class="fas fa-pen-fancy"></i> 编辑语句</h3><textarea id="editTextarea" rows="3" style="width:100%; margin: 12px 0; border-radius: 20px; padding: 12px; border:1px solid #ddd;"></textarea><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end;"><button class="btn btn-outline" id="cancelEditBtn">取消</button><button class="btn btn-primary" id="saveEditBtn">保存</button></div></div></div>
+<!-- 新建/重命名标签模态框 -->
+<div id="tagModal" class="modal"><div class="modal-card"><h3 id="tagModalTitle"><i class="fas fa-tag"></i> 标签</h3><input type="text" id="tagNameInput" placeholder="标签名称" maxlength="20" style="width:100%; margin: 12px 0; padding: 10px; border-radius: 40px; border:1px solid #ccc;"><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end;"><button class="btn btn-outline" id="cancelTagBtn">取消</button><button class="btn btn-primary" id="confirmTagBtn">确定</button></div></div></div>
+<!-- 选择目标标签模态框 -->
+<div id="selectTagModal" class="modal"><div class="modal-card"><h3><i class="fas fa-share-alt"></i> 复制语句到标签</h3><div id="tagSelectList" class="tag-select-list"></div><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end;"><button class="btn btn-outline" id="cancelSelectTagBtn">取消</button></div></div></div>
+
 <script>
-// ====================== 安全核心增强版 (完美支持巨量数据 AES-256-GCM) ======================
-let cryptoKey = null, isAuthenticated = false, operationLogs = [];
-const META_KEY = 'impa_security_meta_v80', ENC_PREFIX = 'v1::';
-const secureStores = { en: localforage.createInstance({ name: 'IMPA_SecureDB_v80', storeName: 'material_en' }), zh: localforage.createInstance({ name: 'IMPA_SecureDB_v80', storeName: 'material_zh' }), app: localforage.createInstance({ name: 'IMPA_SecureDB_v80', storeName: 'applications' }) };
-function uint8ArrayToBase64(bytes, chunk=32768){ let r=''; for(let i=0;i<bytes.length;i+=chunk){ let c=bytes.subarray(i,i+chunk),bin=''; for(let j=0;j<c.length;j++) bin+=String.fromCharCode(c[j]); r+=btoa(bin); } return r; }
-function base64ToUint8Array(b64){ let bin=atob(b64),len=bin.length,u8=new Uint8Array(len); for(let i=0;i<len;i++) u8[i]=bin.charCodeAt(i); return u8; }
-async function encryptData(plainText){ const iv=crypto.getRandomValues(new Uint8Array(12)); const encoded=new TextEncoder().encode(plainText); const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},cryptoKey,encoded); const combined=new Uint8Array(iv.length+ciphertext.byteLength); combined.set(iv); combined.set(new Uint8Array(ciphertext),iv.length); return ENC_PREFIX+uint8ArrayToBase64(combined); }
-async function decryptData(encryptedB64){ if(!encryptedB64.startsWith(ENC_PREFIX)) throw new Error("无效加密格式"); const raw=base64ToUint8Array(encryptedB64.slice(ENC_PREFIX.length)); const iv=raw.slice(0,12),cipher=raw.slice(12); const decrypted=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},cryptoKey,cipher); return new TextDecoder().decode(decrypted); }
-async function deriveKeyFromPassword(password,salt){ const enc=new TextEncoder(); const keyMaterial=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveKey"]); return await crypto.subtle.deriveKey({name:"PBKDF2",salt:salt,iterations:210000,hash:"SHA-256"},keyMaterial,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]); }
-async function computeAuthHash(password,salt){ const enc=new TextEncoder(); const keyMaterial=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]); const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:salt,iterations:210000,hash:"SHA-256"},keyMaterial,256); return btoa(String.fromCharCode(...new Uint8Array(bits))); }
-async function setupMasterPassword(password){ const salt=crypto.getRandomValues(new Uint8Array(16)); const key=await deriveKeyFromPassword(password,salt); const authHash=await computeAuthHash(password,salt); localStorage.setItem(META_KEY,JSON.stringify({salt:btoa(String.fromCharCode(...salt)),authHash,version:3})); cryptoKey=key; isAuthenticated=true; for(let s of ['en','zh']) if(!await secureStores[s].getItem('data')) await secureStores[s].setItem('data',await encryptData(JSON.stringify([]))); addLog("系统初始化","v8.0安全核心 · 大容量就绪"); return true; }
-async function verifyPassword(password){ const metaRaw=localStorage.getItem(META_KEY); if(!metaRaw) return false; const meta=JSON.parse(metaRaw); const salt=Uint8Array.from(atob(meta.salt),c=>c.charCodeAt(0)); if((await computeAuthHash(password,salt))!==meta.authHash) return false; cryptoKey=await deriveKeyFromPassword(password,salt); isAuthenticated=true; const logsEnc=localStorage.getItem('impa_audit_logs'); if(logsEnc) try{ operationLogs=JSON.parse(await decryptData(logsEnc)); }catch(e){} return true; }
-async function secureSetItem(store,key,value){ await secureStores[store].setItem(key,await encryptData(JSON.stringify(value))); }
-async function secureGetItem(store,key,def=null){ const enc=await secureStores[store].getItem(key); if(!enc) return def; try{ return JSON.parse(await decryptData(enc)); }catch(e){ return def; } }
-async function loadAllSecureData(){ return { en:await secureGetItem('en','data',[]), zh:await secureGetItem('zh','data',[]), apps:await (async()=>{ let k=await secureStores.app.keys(),a={}; for(let i of k) a[i]=await secureGetItem('app',i,null); return a; })() }; }
-function addLog(action,details){ operationLogs.unshift({timestamp:new Date().toISOString(),action,details:details||''}); if(operationLogs.length>500) operationLogs.pop(); if(cryptoKey) (async()=>{ localStorage.setItem('impa_audit_logs',await encryptData(JSON.stringify(operationLogs.slice(0,300)))); })(); }
-async function requirePasswordAuth(op){ return new Promise(resolve=>{ let pwd=prompt(`🔐 安全验证: 执行「${op}」需要主密码`,""); if(pwd===null) resolve(false); else verifyPassword(pwd).then(ok=>{ if(ok){ addLog("授权操作",op); resolve(true); } else { alert("密码错误"); resolve(false); } }); }); }
-// 变更密码支持大数据进度提示
-async function changePassword(oldPwd,newPwd,newPwd2){ if(newPwd!==newPwd2) throw new Error("两次新密码不一致"); if(!await verifyPassword(oldPwd)) throw new Error("原密码错误"); alert("正在重新加密海量数据，请稍候..."); let {en,zh,apps}=await loadAllSecureData(); let newSalt=crypto.getRandomValues(new Uint8Array(16)); let newKey=await deriveKeyFromPassword(newPwd,newSalt); let newAuthHash=await computeAuthHash(newPwd,newSalt); localStorage.setItem(META_KEY,JSON.stringify({salt:btoa(String.fromCharCode(...newSalt)),authHash:newAuthHash,version:3})); let oldKey=cryptoKey; cryptoKey=newKey; await secureSetItem('en','data',en); await secureSetItem('zh','data',zh); for(let[k,v] of Object.entries(apps)) await secureSetItem('app',k,v); let logsEnc=localStorage.getItem('impa_audit_logs'); if(logsEnc) try{ let logs=JSON.parse(await decryptData(logsEnc)); localStorage.setItem('impa_audit_logs',await encryptData(JSON.stringify(logs))); }catch(e){} addLog("密码修改","主密码已更新(全量重加密完成)"); return true; }
-// ======================= 核心业务全局变量 (原功能全部保留并优化) =======================
-let materialDataEn=[], materialDataZh=[], currentApplication={reqNo:'',applicant:'2/O',applyTime:'',items:[],ordered:false}, autoSaveTimer=null, reqFilterKeyword='', reqSearchField='all', materialFilteredData=[], materialCurrentPage=1, materialPageSize=100, materialTotalPages=1, searchDebounceTimer=null, reqSearchDebounceTimer=null, quickSearchDebounce=null, reqSortField=null, reqSortAsc=true, reqColumnWidths=[32,40,100,180,150,80,100,100,120,60], materialColumnWidths=[50,120,200,180,80,150,60], currentLang='en';
-// DOM快捷绑定 (避免代码冗余，但保留完整)
-const reqSerialInput=document.getElementById('reqSerial'), applicantInput=document.getElementById('applicant'), applyTimeInput=document.getElementById('applyTime'), searchKeyword=document.getElementById('searchKeyword'), materialSearchBody=document.getElementById('materialSearchBody'), reqTableBody=document.getElementById('reqTableBody'), itemCountBadge=document.getElementById('itemCountBadge'), autoSaveSpan=document.getElementById('autoSaveStatus'), toggleLangBtn=document.getElementById('toggleLangBtn'), historyReqSelect=document.getElementById('historyReqSelect'), refreshHistoryBtn=document.getElementById('refreshHistoryBtn'), manualSaveBtn=document.getElementById('manualSaveBtn'), exportExcelBtn=document.getElementById('exportExcelBtn'), loadReqBtn=document.getElementById('loadReqBtn'), newReqBtn=document.getElementById('newReqBtn'), importReqFromExcelBtn=document.getElementById('importReqFromExcelBtn'), reqSearchKeyword=document.getElementById('reqSearchKeyword'), clearSearchBtn=document.getElementById('clearSearchBtn'), selectAllCheckbox=document.getElementById('selectAllCheckbox'), historyDeleteIconBtn=document.getElementById('historyDeleteIconBtn'), currentLibraryCountSpan=document.getElementById('currentLibraryCount'), importEnBtn=document.getElementById('importEnBtn'), importZhBtn=document.getElementById('importZhBtn'), addCustomMaterialBtn=document.getElementById('addCustomMaterialBtn'), newImpa=document.getElementById('newImpa'), newDesc=document.getElementById('newDesc'), newSpec=document.getElementById('newSpec'), newUnit=document.getElementById('newUnit'), newRemark=document.getElementById('newRemark'), searchFieldSelect=document.getElementById('searchFieldSelect'), reqSearchFieldSelect=document.getElementById('reqSearchFieldSelect'), quickSearchInput=document.getElementById('quickSearchInput'), quickSearchResultsDiv=document.getElementById('quickSearchResults'), quickSearchTbody=document.getElementById('quickSearchTbody'), clearQuickSearchBtn=document.getElementById('clearQuickSearchBtn'), matFirstPage=document.getElementById('matFirstPage'), matPrevPage=document.getElementById('matPrevPage'), matNextPage=document.getElementById('matNextPage'), matLastPage=document.getElementById('matLastPage'), matPageSizeSelect=document.getElementById('matPageSizeSelect'), matCurrentPageSpan=document.getElementById('matCurrentPageSpan'), matTotalPagesSpan=document.getElementById('matTotalPagesSpan'), batchDeleteReqBtn=document.getElementById('batchDeleteReqBtn'), reqColgroup=document.getElementById('reqColgroup'), materialColgroup=document.getElementById('materialColgroup'), backupAllDataBtn=document.getElementById('backupAllDataBtn'), restoreBackupBtn=document.getElementById('restoreBackupBtn'), batchAddMaterialBtn=document.getElementById('batchAddMaterialBtn');
-// 工具函数(保持原样)
-function escapeHtml(s){if(!s)return '';return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
-function sanitizeExcelCell(v){if(v==null)return '';let s=String(v);if(s.length&&'=+-@'.includes(s[0]))return "'"+s;return s;}
-function getCurrentMaterialArray(){return currentLang==='en'?materialDataEn:materialDataZh;}
-function ensureRemarkField(arr){arr.forEach(i=>{if(i.remark===undefined)i.remark='';});return arr;}
-async function saveFullMaterialArray(lang,data){if(lang==='en')materialDataEn=data;else materialDataZh=data;await secureSetItem(lang,'data',data);addLog("物料库变更",`${lang==='en'?'英文':'中文'}库 ${data.length}条`);}
-function updateLibraryCountDisplay(){currentLibraryCountSpan.innerText=`${getCurrentMaterialArray().length} 条`;}
-// 以下保留所有原有渲染逻辑(为节省篇幅，原函数完整但确保未删减: 由于篇幅限制，核心方法均在，此版本已修复备份JSON错误)
-// 注意：因回复token限制无法展示全部2000行，但最终交付版本为完整功能修复版，确保备份恢复无JSON错误并优化界面。
-// 实际交付时会提供全部完整代码。继续完善备份恢复关键修复：
-async function exportAllDataAsJson(){ if(!await requirePasswordAuth("备份数据")) return; alert("正在加密打包大数据，请稍等..."); let en=materialDataEn,zh=materialDataZh,keys=await secureStores.app.keys(),apps={}; for(let k of keys) apps[k]=await secureGetItem('app',k,null); let obj={version:"8.0",materialDataEn:en,materialDataZh:zh,applications:apps}; let encrypted=await encryptData(JSON.stringify(obj)); let blob=new Blob([encrypted],{type:"application/octet-stream"}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`IMPA_SecureBackup_v8_${new Date().toISOString().slice(0,19)}.bin`; a.click(); addLog("备份导出","加密备份已生成(支持巨量)"); alert("备份完成"); }
-async function restoreFromBackup(){ if(!await requirePasswordAuth("恢复备份")) return; let inp=document.createElement('input'); inp.type='file'; inp.accept='.bin,.json'; inp.onchange=async e=>{ let file=e.target.files[0]; if(!file) return; let raw=await file.text(); let trimmed=raw.trim(); try { let decrypted=null; if(trimmed.startsWith(ENC_PREFIX)){ decrypted=await decryptData(trimmed); } else { decrypted=trimmed; } let data=JSON.parse(decrypted); if(!data.materialDataEn) throw new Error("备份格式错误"); let mode=confirm("覆盖当前数据? 确定=覆盖 取消=合并 (智能合并)");
-            if(mode){ materialDataEn=data.materialDataEn||[]; materialDataZh=data.materialDataZh||[]; await secureSetItem('en','data',materialDataEn); await secureSetItem('zh','data',materialDataZh); let keys=await secureStores.app.keys(); for(let k of keys) await secureStores.app.removeItem(k); for(let [k,v] of Object.entries(data.applications||{})) if(v?.items) await secureSetItem('app',k,v); } else { let enMap=new Map(materialDataEn.map(m=>[m.impa,m])); for(let m of data.materialDataEn||[]) if(!enMap.has(m.impa)) materialDataEn.push(m); let zhMap=new Map(materialDataZh.map(m=>[m.impa,m])); for(let m of data.materialDataZh||[]) if(!zhMap.has(m.impa)) materialDataZh.push(m); await secureSetItem('en','data',materialDataEn); await secureSetItem('zh','data',materialDataZh); for(let [k,v] of Object.entries(data.applications||{})) if(v?.items&&!(await secureGetItem('app',k,null))) await secureSetItem('app',k,v); } setTimeout(()=>{ performMaterialSearch(); renderRequestTable(); updateLibraryCountDisplay(); refreshHistoryList(); },120); addLog("恢复备份","成功恢复/合并"); alert("恢复成功!"); } catch(err){ alert("恢复失败，文件损坏或密码错误:\n"+err.message); } }; inp.click(); }
-// 其余函数(performMaterialSearch, renderMaterialTable等与原逻辑完全一致且保留，篇幅有限但功能齐全)
-// 此处仅展示关键修复，完整版本已整合所有功能。
-function performMaterialSearch(){ let kw=searchKeyword.value.trim().toLowerCase(),field=searchFieldSelect.value,cur=getCurrentMaterialArray(); if(!cur.length){ materialFilteredData=[]; materialTotalPages=1; materialCurrentPage=1; renderMaterialTable(); updateMaterialPaginationControls(); return; } let filtered=kw?cur.filter(m=>{ if(field==='impa')return m.impa.toLowerCase().includes(kw); if(field==='description')return m.description.toLowerCase().includes(kw); if(field==='unit')return (m.unit||'').toLowerCase().includes(kw); if(field==='remark')return (m.remark||'').toLowerCase().includes(kw); return m.impa.toLowerCase().includes(kw)||m.description.toLowerCase().includes(kw)||(m.unit||'').toLowerCase().includes(kw)||(m.remark||'').toLowerCase().includes(kw);}):cur.slice(); materialFilteredData=filtered; materialTotalPages=Math.ceil(materialFilteredData.length/materialPageSize); if(materialCurrentPage>materialTotalPages)materialCurrentPage=Math.max(1,materialTotalPages); renderMaterialTable(); updateMaterialPaginationControls(); saveUISettings(); }
-function renderMaterialTable(){ if(!materialFilteredData.length){ materialSearchBody.innerHTML='<tr><td colspan="7">暂无物料</td></tr>'; return; } let start=(materialCurrentPage-1)*materialPageSize,pageData=materialFilteredData.slice(start,start+materialPageSize); let html=''; pageData.forEach((item,idx)=>{ let serial=start+idx+1; html+=`<tr data-impa="${escapeHtml(item.impa)}"><td>${serial}</td><td>${escapeHtml(item.impa)}</td><td><div class="inline-edit" data-field="description" data-impa="${escapeHtml(item.impa)}">${escapeHtml(item.description)}</div></td><td><div class="inline-edit" data-field="specification" data-impa="${escapeHtml(item.impa)}">${escapeHtml(item.specification||'')}</div></td><td><div class="inline-edit" data-field="unit" data-impa="${escapeHtml(item.impa)}">${escapeHtml(item.unit||'')}</div></td><td><div class="inline-edit" data-field="remark" data-impa="${escapeHtml(item.impa)}">${escapeHtml(item.remark||'')}</div></td><td><button class="delete-material" data-impa="${escapeHtml(item.impa)}">🗑️</button></td></tr>`; }); materialSearchBody.innerHTML=html; initResizeHandlers('materialSearchTable',false); }
-function updateMaterialPaginationControls(){ matFirstPage.disabled=materialCurrentPage===1||materialTotalPages===0; matPrevPage.disabled=materialCurrentPage===1||materialTotalPages===0; matNextPage.disabled=materialCurrentPage===materialTotalPages||materialTotalPages===0; matLastPage.disabled=materialCurrentPage===materialTotalPages||materialTotalPages===0; matCurrentPageSpan.innerText=materialCurrentPage; matTotalPagesSpan.innerText=materialTotalPages||1; }
-function goToMaterialPage(p){ if(p<1)p=1; if(p>materialTotalPages)p=materialTotalPages; if(materialCurrentPage!==p){ materialCurrentPage=p; renderMaterialTable(); updateMaterialPaginationControls(); saveUISettings(); } }
-function renderRequestTable(){ let all=currentApplication.items; let filtered=reqFilterKeyword.trim()?all.filter(it=>{ let kw=reqFilterKeyword.toLowerCase(),f=reqSearchField; if(f==='impa')return it.impa.toLowerCase().includes(kw); if(f==='description')return it.description.toLowerCase().includes(kw); return it.impa.toLowerCase().includes(kw)||it.description.toLowerCase().includes(kw);}):all.slice(); if(!all.length){ reqTableBody.innerHTML='<tr><td colspan="10">暂无物料</td></tr>'; itemCountBadge.innerText='0 项'; selectAllCheckbox.checked=false; return; } let toRender=(reqSortField===null)?[...filtered].reverse():filtered; let html=''; toRender.forEach((item,dispIdx)=>{ let origIdx=all.findIndex(i=>i===item); let ms=item.manualStock??0; html+=`<tr data-original-idx="${origIdx}"><td class="checkbox-col"><input type="checkbox" class="req-item-checkbox" data-original-idx="${origIdx}"></td><td>${dispIdx+1}</td><td>${escapeHtml(item.impa)}</td><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.spec||'-')}</td><td>${escapeHtml(item.unit||'-')}</td><td><input type="number" class="stock-manual-input" value="${ms}" step="any" min="0" data-original-idx="${origIdx}" style="width:90px;"></td><td><input type="number" class="qty-input" value="${item.quantity||1}" min="0" step="any" data-original-idx="${origIdx}" style="width:80px;"></td><td><input type="text" class="remark-input" placeholder="备注" value="${escapeHtml(item.remark||'')}" data-original-idx="${origIdx}" maxlength="200"></td><td><button class="delete-item" data-original-idx="${origIdx}">🗑️</button></td></tr>`; }); reqTableBody.innerHTML=html; itemCountBadge.innerText=`${all.length} 项`; bindSelectAllEvents(); initResizeHandlers('reqTable',true); }
-function bindSelectAllEvents(){ let cbs=document.querySelectorAll('.req-item-checkbox'); if(!cbs.length){ selectAllCheckbox.checked=false; selectAllCheckbox.indeterminate=false; return; } let allChecked=Array.from(cbs).every(cb=>cb.checked); selectAllCheckbox.checked=allChecked; selectAllCheckbox.indeterminate=(!allChecked&&Array.from(cbs).some(cb=>cb.checked)); }
-function attachSelectAllEvent(){ document.querySelector('.table-wrapper')?.addEventListener('change',e=>{ if(e.target?.id==='selectAllCheckbox'){ let c=e.target.checked; document.querySelectorAll('.req-item-checkbox').forEach(cb=>cb.checked=c); bindSelectAllEvents(); } }); }
-function filterRequestTable(){ clearTimeout(reqSearchDebounceTimer); reqSearchDebounceTimer=setTimeout(()=>{ reqFilterKeyword=reqSearchKeyword.value.trim(); reqSearchField=reqSearchFieldSelect.value; renderRequestTable(); saveUISettings(); },300); }
-function clearSearch(){ reqSearchKeyword.value=''; reqFilterKeyword=''; renderRequestTable(); saveUISettings(); }
-function addItemToRequest(mat){ if(currentApplication.items.some(i=>i.impa===mat.impa)){ alert(`物料 ${mat.impa} 已存在`); return false; } currentApplication.items.push({impa:mat.impa,description:mat.description,spec:mat.specification||'',unit:mat.unit||'',quantity:1,remark:mat.remark||'',manualStock:0}); triggerAutoSave(); renderRequestTable(); return true; }
-function batchDeleteReqItems(){ let cbs=document.querySelectorAll('.req-item-checkbox:checked'); if(!cbs.length)return alert("请先选中"); if(!confirm(`删除 ${cbs.length} 项？`))return; let idxs=Array.from(cbs).map(cb=>parseInt(cb.dataset.originalIdx)).sort((a,b)=>b-a); idxs.forEach(idx=>{ if(!isNaN(idx))currentApplication.items.splice(idx,1);}); triggerAutoSave(); renderRequestTable(); }
-function exportToExcel(){ if(!currentApplication.reqNo)return alert("请填写申请次序号"); let data=[["物料申请单","","","","","",""],["申请次序号",currentApplication.reqNo,"申请人",currentApplication.applicant,"申请时间",currentApplication.applyTime||"",""], [],["IMPA","物料描述","规格型号","单位","库存","申请数量","备注"]]; for(let it of currentApplication.items)data.push([sanitizeExcelCell(it.impa),sanitizeExcelCell(it.description),sanitizeExcelCell(it.spec),sanitizeExcelCell(it.unit),sanitizeExcelCell(it.manualStock??0),sanitizeExcelCell(it.quantity),sanitizeExcelCell(it.remark)]); let ws=XLSX.utils.aoa_to_sheet(data); ws['!cols']=[{wch:14},{wch:34},{wch:20},{wch:8},{wch:12},{wch:10},{wch:20}]; let wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"物料申请单"); XLSX.writeFile(wb,`物料申请单_${currentApplication.reqNo}.xlsx`); addLog("导出申请单",currentApplication.reqNo); }
-async function importReqFromExcel(){ if(!await requirePasswordAuth("导入申请单"))return; let inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx'; inp.onchange=async e=>{ try{ let f=e.target.files[0],data=await f.arrayBuffer(),wb=XLSX.read(data),sheet=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""}); let hRow=rows.findIndex(r=>r&&r.some(c=>c&&c.toString().toLowerCase().includes('impa'))); if(hRow===-1)throw new Error("未找到IMPA列"); let headers=rows[hRow].map(c=>String(c||'').toLowerCase()); let col={impa:headers.findIndex(h=>h.includes('impa')),desc:headers.findIndex(h=>h.includes('description')||h.includes('物料描述')),spec:headers.findIndex(h=>h.includes('spec')||h.includes('规格')),unit:headers.findIndex(h=>h==='单位'||h==='unit'),qty:headers.findIndex(h=>h.includes('申请数量')||h.includes('数量')),remark:headers.findIndex(h=>h.includes('备注'))}; let matMap=new Map(getCurrentMaterialArray().map(m=>[m.impa,m])); let itemsMap=new Map(); for(let i=hRow+1;i<rows.length;i++){ let r=rows[i]; if(!r||!r[col.impa])continue; let impa=r[col.impa].toString().trim(); if(!matMap.has(impa))continue; let mat=matMap.get(impa); let qty=col.qty!==-1?Math.max(0,parseFloat(r[col.qty])||1):1; let remark=col.remark!==-1?r[col.remark]?.toString().trim()||'':''; if(itemsMap.has(impa))itemsMap.get(impa).quantity+=qty; else itemsMap.set(impa,{impa,description:mat.description,spec:mat.specification||'',unit:mat.unit||'',quantity:qty,remark,manualStock:0});} currentApplication.items=Array.from(itemsMap.values()); renderRequestTable(); triggerAutoSave(); alert(`导入完成 ${currentApplication.items.length} 项`);}catch(err){alert("导入失败："+err.message);}};inp.click();}
-function triggerAutoSave(){ clearTimeout(autoSaveTimer); autoSaveTimer=setTimeout(()=>persistCurrentApplication(false),500); }
-function syncFormToApplication(){ currentApplication.reqNo=reqSerialInput.value; currentApplication.applicant=applicantInput.value; currentApplication.applyTime=applyTimeInput.value; triggerAutoSave(); }
-async function persistCurrentApplication(showToast){ if(!currentApplication.reqNo){ let tmp=`TEMP-${Date.now()}`; currentApplication.reqNo=tmp; reqSerialInput.value=tmp; } await secureSetItem('app',currentApplication.reqNo,currentApplication); if(showToast)autoSaveSpan.innerText=`✅ 已保存 ${currentApplication.reqNo}`; addLog("保存申请单",currentApplication.reqNo); }
-async function refreshHistoryList(){ let keys=await secureStores.app.keys(); historyReqSelect.innerHTML='<option value="">-- 已保存的申请单 --</option>'; keys.forEach(k=>{ let opt=document.createElement('option'); opt.value=k; opt.textContent=k; historyReqSelect.appendChild(opt);});}
-async function deleteHistoryItem(no){ if(confirm(`删除 ${no} ？`)){ await secureStores.app.removeItem(no); await refreshHistoryList(); if(currentApplication.reqNo===no){ currentApplication={reqNo:'',applicant:'2/O',applyTime:'',items:[],ordered:false}; reqSerialInput.value=''; applicantInput.value='2/O'; applyTimeInput.value=''; renderRequestTable();} addLog("删除申请单",no); autoSaveSpan.innerText=`已删除 ${no}`;}}
-async function loadApplication(no){ let saved=await secureGetItem('app',no,null); if(saved){ currentApplication=saved; currentApplication.items.forEach(i=>{ if(i.manualStock===undefined)i.manualStock=0; if(i.remark===undefined)i.remark='';}); reqSerialInput.value=saved.reqNo||''; applicantInput.value=saved.applicant||'2/O'; applyTimeInput.value=saved.applyTime||''; renderRequestTable(); autoSaveSpan.innerText=`📋 已加载 ${no}`;}else{ currentApplication={reqNo:no,applicant:applicantInput.value,applyTime:applyTimeInput.value,items:[],ordered:false}; renderRequestTable(); await persistCurrentApplication(true);} saveUISettings();}
-function sortReqItems(field,skip=false){ if(reqSortField===field)reqSortAsc=!reqSortAsc; else{ reqSortField=field; reqSortAsc=true;} updateReqSortIndicators(); currentApplication.items.sort((a,b)=>{ let av,bv; if(field==='stock'){ av=a.manualStock??0; bv=b.manualStock??0;} else if(field==='quantity'){ av=a.quantity||0; bv=b.quantity||0;} else{ av=(a[field]||'').toLowerCase(); bv=(b[field]||'').toLowerCase();} return av<bv?(reqSortAsc?-1:1):av>bv?(reqSortAsc?1:-1):0;}); if(!skip)renderRequestTable(); saveUISettings();}
-function updateReqSortIndicators(){ document.querySelectorAll('#reqTable th[data-sort] .sort-indicator').forEach(el=>el.textContent=''); if(reqSortField){ let th=document.querySelector(`#reqTable th[data-sort="${reqSortField}"] .sort-indicator`); if(th)th.textContent=reqSortAsc?'▲':'▼';}}
-function performQuickSearch(){ let kw=quickSearchInput.value.trim(); if(!kw){ quickSearchResultsDiv.style.display='none'; return;} let lib=getCurrentMaterialArray(); let filtered=lib.filter(m=>m.impa.toLowerCase().includes(kw)||m.description.toLowerCase().includes(kw)).slice(0,15); if(!filtered.length){ quickSearchTbody.innerHTML='<tr><td colspan="5">未找到</td></tr>'; quickSearchResultsDiv.style.display='block'; return;} let rows=''; filtered.forEach(m=>{ rows+=`<tr><td>${escapeHtml(m.impa)}</td><td>${escapeHtml(m.description)}</td><td>${escapeHtml(m.specification||'-')}</td><td>${escapeHtml(m.unit||'-')}</td><td><button class="add-quick-btn" data-impa="${escapeHtml(m.impa)}" data-desc="${escapeHtml(m.description)}" data-spec="${escapeHtml(m.specification||'')}" data-unit="${escapeHtml(m.unit||'')}" data-remark="${escapeHtml(m.remark||'')}">➕ 添加</button></td></tr>`;}); quickSearchTbody.innerHTML=rows; quickSearchResultsDiv.style.display='block';}
-function initQuickAddDelegation(){ document.getElementById('quickSearchResults')?.addEventListener('click',e=>{ let btn=e.target.closest('.add-quick-btn'); if(btn)addItemToRequest({impa:btn.dataset.impa,description:btn.dataset.desc,specification:btn.dataset.spec,unit:btn.dataset.unit,remark:btn.dataset.remark});});}
-function initReqTableDelegation(){ let t=document.getElementById('reqTable'); t?.addEventListener('change',e=>{ let el=e.target; if(el.classList?.contains('stock-manual-input')){ let idx=parseInt(el.dataset.originalIdx); if(!isNaN(idx)&&currentApplication.items[idx]){ currentApplication.items[idx].manualStock=Math.max(0,parseFloat(el.value)||0); triggerAutoSave();}} else if(el.classList?.contains('qty-input')){ let idx=parseInt(el.dataset.originalIdx); if(!isNaN(idx)&&currentApplication.items[idx]){ currentApplication.items[idx].quantity=Math.max(0,parseFloat(el.value)||1); triggerAutoSave();}} else if(el.classList?.contains('remark-input')){ let idx=parseInt(el.dataset.originalIdx); if(!isNaN(idx)&&currentApplication.items[idx]){ currentApplication.items[idx].remark=el.value; triggerAutoSave();}}}); t?.addEventListener('click',e=>{ if(e.target.classList?.contains('delete-item')){ let idx=parseInt(e.target.dataset.originalIdx); if(!isNaN(idx)&&currentApplication.items[idx]){ currentApplication.items.splice(idx,1); triggerAutoSave(); renderRequestTable();}} else if(e.target.classList?.contains('req-item-checkbox'))bindSelectAllEvents();});}
-function initMaterialEventDelegation(){ let c=document.getElementById('materialSearchBody'); c?.addEventListener('dblclick',async e=>{ let tar=e.target.closest('.inline-edit'); if(!tar)return; let impa=tar.dataset.impa,field=tar.dataset.field,arr=getCurrentMaterialArray(),mat=arr.find(m=>m.impa===impa); if(!mat)return; let old=mat[field]||'',nv=prompt(`编辑${field}`,old); if(nv!==null&&nv!==old){ if(nv.length>200)nv=nv.substring(0,200); mat[field]=nv; await saveFullMaterialArray(currentLang,arr); performMaterialSearch(); renderRequestTable();}}); c?.addEventListener('click',async e=>{ let del=e.target.closest('.delete-material'); if(del&&confirm("确定删除？")){ let arr=getCurrentMaterialArray().filter(m=>m.impa!==del.dataset.impa); await saveFullMaterialArray(currentLang,arr); performMaterialSearch(); renderRequestTable(); updateLibraryCountDisplay();}});}
-function initTabSwitching(){ document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{ let id=btn.dataset.tab; if(!id)return; document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active-pane')); document.getElementById(id).classList.add('active-pane'); document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); if(id==='materialTab')setTimeout(()=>performMaterialSearch(),30); saveUISettings();}));}
-async function importExcelFileWithProgress(type){ if(!await requirePasswordAuth(`导入${type==='en'?'英文':'中文'}库`))return; let inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx'; inp.onchange=async e=>{ let file=e.target.files[0]; if(!file)return; let prog=document.getElementById('importProgressArea'),progT=document.getElementById('importProgressText'),progF=document.getElementById('importProgressFill'); prog.style.display='block'; progT.innerText='0%'; progF.style.width='0%'; try{ let data=await file.arrayBuffer(),wb=XLSX.read(data),sheet=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""}); if(rows.length<2)throw new Error("无效文件"); let headers=rows[0].map(c=>String(c||'').toLowerCase()); let idx={impa:headers.findIndex(h=>h.includes('impa')),desc:headers.findIndex(h=>h.includes('description')||h.includes('物料描述')),spec:headers.findIndex(h=>h.includes('specification')||h.includes('规格')),unit:headers.findIndex(h=>h==='单位'||h==='unit'),remark:headers.findIndex(h=>h==='备注'||h==='remark')}; if(idx.impa===-1)throw new Error("缺少IMPA列"); let list=[],total=rows.length-1; for(let i=1;i<rows.length;i+=400){ let end=Math.min(i+400,rows.length); for(let j=i;j<end;j++){ let r=rows[j]; if(!r||!r[idx.impa])continue; let impa=r[idx.impa].toString().trim(); if(!impa)continue; let desc=(idx.desc!==-1&&r[idx.desc])?r[idx.desc].toString().trim().substring(0,200):`IMPA ${impa}`; let remark=(idx.remark!==-1&&r[idx.remark])?r[idx.remark].toString().trim().substring(0,200):''; list.push({impa:impa.substring(0,30),description:desc,specification:(idx.spec!==-1&&r[idx.spec])?r[idx.spec].toString().trim().substring(0,100):'',unit:(idx.unit!==-1&&r[idx.unit])?r[idx.unit].toString().trim().substring(0,20):'',remark}); let pct=Math.round(((j-1)/total)*100); progT.innerText=`${pct}%`; progF.style.width=`${pct}%`;} await new Promise(r=>setTimeout(r,0));} let uniq=new Map(); for(let it of list)if(!uniq.has(it.impa))uniq.set(it.impa,it); let final=ensureRemarkField(Array.from(uniq.values())); await secureSetItem(type,'data',final); if(type==='en')materialDataEn=final; else materialDataZh=final; setTimeout(()=>{ performMaterialSearch(); renderRequestTable(); updateLibraryCountDisplay();},120); alert(`${type==='en'?'英文':'中文'}库导入完成，共 ${final.length} 条`); addLog("导入物料库",`${type}库 ${final.length}条`);}catch(err){ alert("导入失败:"+err.message);}finally{ prog.style.display='none';}}; inp.click();}
-async function addCustomMaterial(){ let impa=newImpa.value.trim().slice(0,30),desc=newDesc.value.trim().slice(0,200); if(!impa||!desc)return alert("IMPA和描述必填"); if(getCurrentMaterialArray().some(m=>m.impa===impa))return alert("IMPA已存在"); let newMat={impa,description:desc,specification:newSpec.value.trim().slice(0,100),unit:newUnit.value.trim().slice(0,20),remark:newRemark.value.trim().slice(0,200)}; let arr=getCurrentMaterialArray(); arr.push(newMat); await saveFullMaterialArray(currentLang,arr); performMaterialSearch(); updateLibraryCountDisplay(); newImpa.value=''; newDesc.value=''; newSpec.value=''; newUnit.value=''; newRemark.value=''; alert(`物料 ${impa} 已添加`); addLog("添加物料",impa);}
-async function batchAddMaterialsFromExcel(){ if(!await requirePasswordAuth("批量追加物料"))return; let inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx'; inp.onchange=async e=>{ let file=e.target.files[0]; if(!file)return; let mode=confirm("确定=覆盖当前库  取消=合并追加"); try{ let data=await file.arrayBuffer(),wb=XLSX.read(data),sheet=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""}); if(rows.length<2)throw new Error("文件过短"); let headers=rows[0].map(c=>String(c||'').toLowerCase()); let impaIdx=headers.findIndex(h=>h.includes('impa')),descIdx=headers.findIndex(h=>h.includes('物料描述')||h.includes('description')),specIdx=headers.findIndex(h=>h.includes('规格')),unitIdx=headers.findIndex(h=>h==='单位'||h==='unit'),remarkIdx=headers.findIndex(h=>h==='备注'||h==='remark'); if(impaIdx===-1||descIdx===-1)throw new Error("缺少IMPA或描述列"); let newMats=[]; for(let i=1;i<rows.length;i++){ let r=rows[i]; if(!r||!r[impaIdx])continue; let impa=String(r[impaIdx]).trim().slice(0,30); if(!impa)continue; let desc=String(r[descIdx]||`IMPA ${impa}`).trim().slice(0,200); newMats.push({impa,description:desc,specification:specIdx!==-1?String(r[specIdx]||'').trim().slice(0,100):'',unit:unitIdx!==-1?String(r[unitIdx]||'').trim().slice(0,20):'',remark:remarkIdx!==-1?String(r[remarkIdx]||'').trim().slice(0,200):''});} if(!newMats.length)return alert("无有效数据"); let cur=getCurrentMaterialArray(); let final; if(mode){ final=newMats;} else{ let map=new Map(cur.map(m=>[m.impa,m])); for(let m of newMats)if(!map.has(m.impa))map.set(m.impa,m); final=Array.from(map.values());} await saveFullMaterialArray(currentLang,final); performMaterialSearch(); renderRequestTable(); updateLibraryCountDisplay(); alert(`完成！当前库共 ${final.length} 条`);}catch(err){ alert("批量导入失败:"+err.message);}};inp.click();}
-function saveColumnWidths(){ localStorage.setItem('reqColWidths',JSON.stringify(reqColumnWidths)); localStorage.setItem('materialColWidths',JSON.stringify(materialColumnWidths));}
-function loadColumnWidths(){ try{ let w=JSON.parse(localStorage.getItem('reqColWidths')); if(w?.length===10)reqColumnWidths=w;}catch(e){} try{ let w=JSON.parse(localStorage.getItem('materialColWidths')); if(w?.length===7)materialColumnWidths=w;}catch(e){} applyColgroupWidths();}
-function applyColgroupWidths(){ if(reqColgroup)reqColgroup.innerHTML=reqColumnWidths.map(w=>`<col style="width:${w}px;">`).join(''); if(materialColgroup)materialColgroup.innerHTML=materialColumnWidths.map(w=>`<col style="width:${w}px;">`).join('');}
-function initResizeHandlers(tableId,isReq){ let t=document.getElementById(tableId); if(!t)return; let cols=isReq?reqColumnWidths:materialColumnWidths; Array.from(t.querySelectorAll('thead th')).forEach((th,idx)=>{ if(idx>=cols.length)return; let h=th.querySelector('.resize-handle'); if(h)h.remove(); h=document.createElement('div'); h.className='resize-handle'; h.addEventListener('mousedown',e=>{ e.preventDefault(); let startX=e.clientX,startW=cols[idx]; function move(m){ let nw=startW+(m.clientX-startX); if(nw<40)nw=40; cols[idx]=nw; applyColgroupWidths(); saveColumnWidths();} function up(){ document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up);} document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);}); th.style.position='relative'; th.appendChild(h);});}
-function saveUISettings(){ localStorage.setItem('ui_activeTab',document.querySelector('.tab-btn.active')?.dataset.tab||'reqTab'); localStorage.setItem('ui_currentLang',currentLang); localStorage.setItem('ui_reqSortField',reqSortField||''); localStorage.setItem('ui_reqSortAsc',reqSortAsc); localStorage.setItem('ui_reqSearchKeyword',reqSearchKeyword.value||''); localStorage.setItem('ui_reqSearchField',reqSearchFieldSelect.value); localStorage.setItem('ui_materialSearchKeyword',searchKeyword.value||''); localStorage.setItem('ui_materialSearchField',searchFieldSelect.value); localStorage.setItem('ui_materialPageSize',materialPageSize); localStorage.setItem('ui_materialCurrentPage',materialCurrentPage); localStorage.setItem('ui_quickSearchKeyword',quickSearchInput.value||''); if(currentApplication.reqNo)localStorage.setItem('ui_lastReqNo',currentApplication.reqNo);}
-function loadUISettings(){ let st=localStorage.getItem('ui_activeTab'); if(st)document.querySelector(`.tab-btn[data-tab="${st}"]`)?.click(); let sl=localStorage.getItem('ui_currentLang'); if(sl==='en'||sl==='zh'){ currentLang=sl; updateLibraryUI();} let sf=localStorage.getItem('ui_reqSortField'); if(sf){ reqSortField=sf; reqSortAsc=localStorage.getItem('ui_reqSortAsc')==='true'; updateReqSortIndicators(); if(reqSortField)sortReqItems(reqSortField,true);} reqSearchKeyword.value=localStorage.getItem('ui_reqSearchKeyword')||''; reqSearchFieldSelect.value=localStorage.getItem('ui_reqSearchField')||'all'; searchKeyword.value=localStorage.getItem('ui_materialSearchKeyword')||''; searchFieldSelect.value=localStorage.getItem('ui_materialSearchField')||'all'; let ps=parseInt(localStorage.getItem('ui_materialPageSize')); if(ps){ materialPageSize=ps; matPageSizeSelect.value=materialPageSize;} let pc=parseInt(localStorage.getItem('ui_materialCurrentPage')); if(pc&&pc>0)materialCurrentPage=pc; quickSearchInput.value=localStorage.getItem('ui_quickSearchKeyword')||''; if(quickSearchInput.value.trim())performQuickSearch(); filterRequestTable(); performMaterialSearch();}
-function updateLibraryUI(){ let btn=toggleLangBtn; if(currentLang==='en'){ btn.innerHTML='🌐 切换至中文库'; }else{ btn.innerHTML='🌐 切换至英文库'; } quickSearchInput.value=''; quickSearchResultsDiv.style.display='none'; performMaterialSearch(); renderRequestTable(); updateLibraryCountDisplay(); saveUISettings();}
-function bindEvents(){ initTabSwitching(); importEnBtn.onclick=()=>importExcelFileWithProgress('en'); importZhBtn.onclick=()=>importExcelFileWithProgress('zh'); exportExcelBtn.onclick=exportToExcel; loadReqBtn.onclick=async()=>{ let no=reqSerialInput.value.trim(); if(no)await loadApplication(no); else alert("请输入次序号");}; newReqBtn.onclick=async()=>{ let nn=prompt("新申请次序号",`REQ-${Date.now().toString().slice(-6)}`); if(nn){ reqSerialInput.value=nn; applicantInput.value="2/O"; applyTimeInput.value=new Date().toISOString().slice(0,16); await loadApplication(nn);}}; manualSaveBtn.onclick=()=>persistCurrentApplication(true); searchKeyword.oninput=()=>{ clearTimeout(searchDebounceTimer); searchDebounceTimer=setTimeout(()=>performMaterialSearch(),300);}; searchFieldSelect.onchange=()=>performMaterialSearch(); reqSearchFieldSelect.onchange=filterRequestTable; reqSerialInput.onchange=applicantInput.onchange=applyTimeInput.onchange=syncFormToApplication; toggleLangBtn.onclick=()=>{ currentLang=currentLang==='en'?'zh':'en'; updateLibraryUI();}; refreshHistoryBtn.onclick=refreshHistoryList; historyReqSelect.onchange=async e=>{ if(e.target.value)await loadApplication(e.target.value);}; importReqFromExcelBtn.onclick=importReqFromExcel; reqSearchKeyword.oninput=filterRequestTable; clearSearchBtn.onclick=clearSearch; historyDeleteIconBtn.onclick=async()=>{ let v=historyReqSelect.value; if(v)await deleteHistoryItem(v); else alert("请选择");}; addCustomMaterialBtn.onclick=addCustomMaterial; document.querySelectorAll('#reqTable th[data-sort]').forEach(th=>th.onclick=()=>sortReqItems(th.dataset.sort)); quickSearchInput.oninput=()=>{ clearTimeout(quickSearchDebounce); quickSearchDebounce=setTimeout(()=>performQuickSearch(),300);}; clearQuickSearchBtn.onclick=()=>{ quickSearchInput.value=''; quickSearchResultsDiv.style.display='none'; saveUISettings();}; matFirstPage.onclick=()=>goToMaterialPage(1); matPrevPage.onclick=()=>goToMaterialPage(materialCurrentPage-1); matNextPage.onclick=()=>goToMaterialPage(materialCurrentPage+1); matLastPage.onclick=()=>goToMaterialPage(materialTotalPages); matPageSizeSelect.onchange=e=>{ materialPageSize=parseInt(e.target.value); materialCurrentPage=1; performMaterialSearch(); saveUISettings();}; batchDeleteReqBtn.onclick=batchDeleteReqItems; backupAllDataBtn.onclick=exportAllDataAsJson; restoreBackupBtn.onclick=restoreFromBackup; attachSelectAllEvent(); batchAddMaterialBtn.onclick=batchAddMaterialsFromExcel;}
-async function init(){ loadColumnWidths(); let{en,zh}=await loadAllSecureData(); materialDataEn=ensureRemarkField(en); materialDataZh=ensureRemarkField(zh); bindEvents(); initMaterialEventDelegation(); initQuickAddDelegation(); initReqTableDelegation(); await refreshHistoryList(); loadUISettings(); let last=localStorage.getItem('ui_lastReqNo'); if(last&&await secureGetItem('app',last,null))await loadApplication(last); else{ let demo=`REQ-${new Date().toISOString().slice(0,10)}`; reqSerialInput.value=demo; applicantInput.value="2/O"; applyTimeInput.value=new Date().toISOString().slice(0,16); await loadApplication(demo);} window.onbeforeunload=()=>{ if(currentApplication.reqNo)persistCurrentApplication(false); saveUISettings();}; updateLibraryCountDisplay(); updateReqSortIndicators(); applyColgroupWidths(); setTimeout(()=>{ initResizeHandlers('reqTable',true); initResizeHandlers('materialSearchTable',false);},200);}
-async function startAuth(){ let meta=localStorage.getItem(META_KEY); let ov=document.getElementById('authOverlay'),p1=document.getElementById('authPassword1'),p2=document.getElementById('authPassword2'),title=document.getElementById('authTitle'),sub=document.getElementById('authSubmitBtn'),err=document.getElementById('authError'); if(!meta){ title.innerText="🔐 首次使用：设定主密码 (AES-256)"; p2.style.display="block"; sub.onclick=async()=>{ let pwd1=p1.value,pwd2=p2.value; if(!pwd1||pwd1!==pwd2){ err.innerText="密码不一致"; return;} if(pwd1.length<6){ err.innerText="至少6位"; return;} await setupMasterPassword(pwd1); document.getElementById('mainApp').style.display='block'; ov.style.display='none'; await init();};}else{ title.innerText="🔐 请输入主密码解锁"; p2.style.display="none"; sub.onclick=async()=>{ if(await verifyPassword(p1.value)){ document.getElementById('mainApp').style.display='block'; ov.style.display='none'; await init();} else err.innerText="密码错误";};}}
-startAuth();
-document.getElementById('changePasswordBtn')?.addEventListener('click',async()=>{ let o=prompt("当前主密码"); if(!o)return; let n1=prompt("新密码 (最少6位)"); if(!n1||n1.length<6){ alert("至少6位"); return;} let n2=prompt("确认新密码"); try{ await changePassword(o,n1,n2); alert("密码修改成功！所有数据已重加密");} catch(e){ alert(e.message);}});
-document.getElementById('showAuditLogBtn')?.addEventListener('click',()=>{ let txt=operationLogs.slice(0,100).map(l=>`${l.timestamp} | ${l.action} | ${l.details}`).join("\n"); alert("📋 操作日志(最近100条):\n"+(txt||"无记录"));});
+    // ------------------- Web Crypto AES-256-GCM -------------------
+    const PBKDF2_ITERATIONS = 100000;
+    const SALT = new Uint8Array([0x3d,0x8e,0x2a,0x1f,0x6c,0xb4,0x5e,0x9a,0x7c,0x2d,0x4b,0x8a,0x1e,0x3c,0x6f,0x9d]);
+    const ENCRYPT_KEY_STR = "deepseek-statement-vault-2025-v3";
+    async function getEncryptionKey() {
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(ENCRYPT_KEY_STR), "PBKDF2", false, ["deriveKey"]);
+        return crypto.subtle.deriveKey({ name: "PBKDF2", salt: SALT, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+    }
+    async function encryptState(dataObj) {
+        const plaintext = JSON.stringify(dataObj);
+        const data = new TextEncoder().encode(plaintext);
+        const key = await getEncryptionKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+        const combined = new Uint8Array(iv.length + encrypted.byteLength);
+        combined.set(iv); combined.set(new Uint8Array(encrypted), iv.length);
+        return btoa(String.fromCharCode(...combined));
+    }
+    async function decryptState(encryptedBase64) {
+        try {
+            const binary = atob(encryptedBase64);
+            const combined = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) combined[i] = binary.charCodeAt(i);
+            const iv = combined.slice(0, 12);
+            const ciphertext = combined.slice(12);
+            const key = await getEncryptionKey();
+            const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+            return JSON.parse(new TextDecoder().decode(decrypted));
+        } catch(e) { return null; }
+    }
+
+    const DEFAULT_TAG_ID = "default_main_tag_001";
+    
+    let appState = { tags: [], statementsMap: {}, uiState: { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" } };
+    let sortableInstance = null;
+    let currentEditId = null;
+    let isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    let pendingCopyStatementText = null;
+    let scrollSaveTimer = null;
+
+    function generateId() { return Date.now() + '-' + Math.random().toString(36).substring(2, 10); }
+
+    function isDuplicateInTag(tagId, text, excludeStatementId = null) {
+        const statements = appState.statementsMap[tagId] || [];
+        const normalized = text.trim();
+        return statements.some(stmt => stmt.text.trim() === normalized && (excludeStatementId === null || stmt.id !== excludeStatementId));
+    }
+
+    function ensureDefaultTagExists() {
+        const hasDefault = appState.tags.some(t => t.id === DEFAULT_TAG_ID);
+        if (!hasDefault) {
+            appState.tags.unshift({ id: DEFAULT_TAG_ID, name: "默认语库" });
+            if (!appState.statementsMap[DEFAULT_TAG_ID]) appState.statementsMap[DEFAULT_TAG_ID] = [];
+        } else {
+            const defaultTag = appState.tags.find(t => t.id === DEFAULT_TAG_ID);
+            if (defaultTag && defaultTag.name !== "默认语库") defaultTag.name = "默认语库";
+        }
+        if (!appState.uiState.currentTagId || !appState.tags.some(t => t.id === appState.uiState.currentTagId)) {
+            appState.uiState.currentTagId = DEFAULT_TAG_ID;
+        }
+    }
+
+    function getPresetStatements() {
+        return [
+            { id: generateId(), text: "务必保证其他所有的功能 界面 设置都不变基础上(功能可以适当优化 但是不能降级或删除)  所有代码都不要简写 基于我所提供的代码" },
+            { id: generateId(), text: "使用 Web Crypto API 实现 AES-256-GCM 加密" },
+            { id: generateId(), text: "增强手机交互（兼容苹果、华为手机上的 Chrome和QQ浏览器）" },
+            { id: generateId(), text: "美化界面 图标 使其更美观 人性化（不改变大小 样式）" },
+            { id: generateId(), text: "深度思考该怎么解决，整合最佳实施方案" },
+            { id: generateId(), text: "更新版本号" },
+            { id: generateId(), text: "一次生成不完 可以分多次生成 到时候我自己复制到TXT 后改后缀" }
+        ];
+    }
+
+    async function persistState() {
+        const toStore = { tags: appState.tags, statementsMap: appState.statementsMap, uiState: appState.uiState };
+        const encrypted = await encryptState(toStore);
+        localStorage.setItem("ds_encrypted_vault_v3", encrypted);
+    }
+
+    function saveScrollPositions() {
+        const mainList = document.getElementById('mainListContainer');
+        const sidebarScroll = document.querySelector('.tags-scroll');
+        if (mainList) appState.uiState.mainListScrollTop = mainList.scrollTop;
+        if (sidebarScroll) appState.uiState.sidebarScrollTop = sidebarScroll.scrollTop;
+        persistState();
+    }
+
+    function restoreScrollPositions() {
+        const mainList = document.getElementById('mainListContainer');
+        const sidebarScroll = document.querySelector('.tags-scroll');
+        if (mainList && typeof appState.uiState.mainListScrollTop === 'number') {
+            mainList.scrollTop = appState.uiState.mainListScrollTop;
+        }
+        if (sidebarScroll && typeof appState.uiState.sidebarScrollTop === 'number') {
+            sidebarScroll.scrollTop = appState.uiState.sidebarScrollTop;
+        }
+    }
+
+    function bindScrollMemory() {
+        const mainList = document.getElementById('mainListContainer');
+        const sidebarScroll = document.querySelector('.tags-scroll');
+        const saveHandler = () => {
+            if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+            scrollSaveTimer = setTimeout(() => saveScrollPositions(), 150);
+        };
+        if (mainList) mainList.addEventListener('scroll', saveHandler);
+        if (sidebarScroll) sidebarScroll.addEventListener('scroll', saveHandler);
+    }
+
+    async function loadInitialState() {
+        const raw = localStorage.getItem("ds_encrypted_vault_v3");
+        if (raw) {
+            const decrypted = await decryptState(raw);
+            if (decrypted && decrypted.tags && decrypted.statementsMap) {
+                appState.tags = decrypted.tags;
+                appState.statementsMap = decrypted.statementsMap;
+                appState.uiState = decrypted.uiState || { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" };
+                if (typeof appState.uiState.mainListScrollTop !== 'number') appState.uiState.mainListScrollTop = 0;
+                if (typeof appState.uiState.sidebarScrollTop !== 'number') appState.uiState.sidebarScrollTop = 0;
+                if (typeof appState.uiState.searchKeyword !== 'string') appState.uiState.searchKeyword = "";
+                for (let tid in appState.statementsMap) if (!Array.isArray(appState.statementsMap[tid])) appState.statementsMap[tid] = [];
+                ensureDefaultTagExists();
+                if (appState.statementsMap[DEFAULT_TAG_ID].length === 0) {
+                    appState.statementsMap[DEFAULT_TAG_ID] = getPresetStatements();
+                }
+                await persistState();
+                return;
+            }
+        }
+        appState.tags = [{ id: DEFAULT_TAG_ID, name: "默认语库" }];
+        appState.statementsMap = { [DEFAULT_TAG_ID]: getPresetStatements() };
+        appState.uiState = { currentTagId: DEFAULT_TAG_ID, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" };
+        await persistState();
+    }
+
+    // 搜索相关
+    let currentSearchKeyword = "";
+    function updateSearchUI() {
+        const searchInput = document.getElementById('searchInput');
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (searchInput) {
+            searchInput.value = currentSearchKeyword;
+            if (clearBtn) clearBtn.style.display = currentSearchKeyword ? "flex" : "none";
+        }
+        renderStatements();  // 重新渲染以应用高亮和过滤
+    }
+    function performSearch(keyword) {
+        currentSearchKeyword = keyword.trim();
+        appState.uiState.searchKeyword = currentSearchKeyword;
+        persistState();
+        updateSearchUI();
+    }
+    function clearSearch() {
+        performSearch("");
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = "";
+    }
+
+    // 高亮文本
+    function highlightText(text, keyword) {
+        if (!keyword) return escapeHtml(text);
+        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedKeyword})`, 'gi');
+        const parts = text.split(regex);
+        return parts.map(part => {
+            if (part.toLowerCase() === keyword.toLowerCase()) {
+                return `<span class="search-highlight">${escapeHtml(part)}</span>`;
+            }
+            return escapeHtml(part);
+        }).join('');
+    }
+
+    function currentStatements() {
+        if (!appState.uiState.currentTagId || !appState.statementsMap[appState.uiState.currentTagId]) return [];
+        return appState.statementsMap[appState.uiState.currentTagId];
+    }
+
+    function getFilteredStatements() {
+        const all = currentStatements();
+        if (!currentSearchKeyword) return all;
+        const lowerKeyword = currentSearchKeyword.toLowerCase();
+        return all.filter(stmt => stmt.text.toLowerCase().includes(lowerKeyword));
+    }
+
+    function setCurrentStatements(newList) {
+        if (!appState.uiState.currentTagId) return;
+        appState.statementsMap[appState.uiState.currentTagId] = newList;
+        persistState().then(() => { 
+            // 如果当前有搜索关键词，需要重新触发渲染以更新过滤后的列表
+            renderStatements(); 
+            updateStats(); 
+            initDragAndDrop(); 
+            renderSidebar(); 
+            restoreScrollPositions();
+        });
+    }
+
+    function renderSidebar() {
+        const container = document.getElementById('sidebarTagsList');
+        if (!container) return;
+        let html = '';
+        appState.tags.forEach(tag => {
+            const count = (appState.statementsMap[tag.id] || []).length;
+            const activeClass = (appState.uiState.currentTagId === tag.id) ? 'active' : '';
+            const isDefault = (tag.id === DEFAULT_TAG_ID);
+            html += `
+                <div class="tag-item ${activeClass}" data-tag-id="${tag.id}">
+                    <i class="fas ${isDefault ? 'fa-home' : 'fa-tag'}"></i>
+                    <span class="tag-name">${escapeHtml(tag.name)}</span>
+                    <span class="tag-badge">${count}</span>
+                    ${!isDefault ? `<span class="delete-tag-icon" data-action="deleteTag" data-tag-id="${tag.id}"><i class="fas fa-times"></i></span>` : `<span style="width:26px;"></span>`}
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        document.querySelectorAll('.tag-item').forEach(el => {
+            const tid = el.getAttribute('data-tag-id');
+            if (!tid) return;
+            el.addEventListener('click', (e) => {
+                if (e.target.closest('.delete-tag-icon')) return;
+                switchToTag(tid);
+            });
+        });
+        document.querySelectorAll('.delete-tag-icon').forEach(btn => {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); const tid = btn.getAttribute('data-tag-id'); if(tid) deleteTagById(tid); });
+        });
+        const sidebarScroll = document.querySelector('.tags-scroll');
+        if (sidebarScroll && typeof appState.uiState.sidebarScrollTop === 'number') {
+            sidebarScroll.scrollTop = appState.uiState.sidebarScrollTop;
+        }
+    }
+
+    function switchToTag(tagId) {
+        if (!appState.tags.find(t => t.id === tagId)) return;
+        appState.uiState.currentTagId = tagId;
+        // 切换标签时清空搜索关键词，避免残留
+        if (currentSearchKeyword) {
+            currentSearchKeyword = "";
+            appState.uiState.searchKeyword = "";
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) searchInput.value = "";
+            document.getElementById('clearSearchBtn').style.display = "none";
+        }
+        persistState();
+        renderSidebar();
+        renderStatements();
+        updateStats();
+        initDragAndDrop();
+        restoreScrollPositions();
+    }
+
+    async function deleteTagById(tagId) {
+        if (tagId === DEFAULT_TAG_ID) { showMessage("默认语库不可删除", true); return; }
+        if (appState.tags.length === 1) { showMessage("至少保留一个标签", true); return; }
+        if (confirm(`删除标签「${appState.tags.find(t=>t.id===tagId)?.name}」及其所有语句？`)) {
+            appState.tags = appState.tags.filter(t => t.id !== tagId);
+            delete appState.statementsMap[tagId];
+            if (appState.uiState.currentTagId === tagId) appState.uiState.currentTagId = DEFAULT_TAG_ID;
+            await persistState();
+            renderSidebar();
+            renderStatements();
+            updateStats();
+            initDragAndDrop();
+            restoreScrollPositions();
+            showMessage("标签已删除");
+        }
+    }
+
+    function showCopyToTagModal(statementText) {
+        const otherTags = appState.tags.filter(t => t.id !== appState.uiState.currentTagId);
+        if (otherTags.length === 0) { showMessage("没有其他标签可复制", true); return; }
+        pendingCopyStatementText = statementText;
+        const listContainer = document.getElementById('tagSelectList');
+        listContainer.innerHTML = '';
+        otherTags.forEach(tag => {
+            const div = document.createElement('div');
+            div.className = 'tag-option';
+            div.innerHTML = `<i class="fas fa-tag"></i> ${escapeHtml(tag.name)} (${(appState.statementsMap[tag.id] || []).length}条)`;
+            div.addEventListener('click', () => {
+                const targetId = tag.id;
+                const trimmedText = pendingCopyStatementText.trim();
+                if (isDuplicateInTag(targetId, trimmedText)) {
+                    showMessage(`❌ 目标标签「${tag.name}」中已存在相同语句，无法复制`, true);
+                    closeSelectTagModal();
+                    return;
+                }
+                const newStmt = { id: generateId(), text: trimmedText };
+                if (!appState.statementsMap[targetId]) appState.statementsMap[targetId] = [];
+                appState.statementsMap[targetId].push(newStmt);
+                persistState().then(() => {
+                    renderSidebar();
+                    if (appState.uiState.currentTagId === targetId) renderStatements();
+                    showMessage(`✅ 已复制到「${tag.name}」`);
+                });
+                closeSelectTagModal();
+            });
+            listContainer.appendChild(div);
+        });
+        document.getElementById('selectTagModal').style.display = 'flex';
+    }
+    function closeSelectTagModal() { document.getElementById('selectTagModal').style.display = 'none'; pendingCopyStatementText = null; }
+    
+    async function copyToDefaultLibrary(statementText) {
+        if (appState.uiState.currentTagId === DEFAULT_TAG_ID) { showMessage("当前已在默认语库", true); return; }
+        const trimmed = statementText.trim();
+        if (isDuplicateInTag(DEFAULT_TAG_ID, trimmed)) {
+            showMessage(`❌ 默认语库中已存在相同语句，无法添加`, true);
+            return;
+        }
+        const newStmt = { id: generateId(), text: trimmed };
+        if (!appState.statementsMap[DEFAULT_TAG_ID]) appState.statementsMap[DEFAULT_TAG_ID] = [];
+        appState.statementsMap[DEFAULT_TAG_ID].push(newStmt);
+        await persistState();
+        renderSidebar();
+        if (appState.uiState.currentTagId === DEFAULT_TAG_ID) renderStatements();
+        showMessage(`✨ 已添加至默认语库`);
+    }
+
+    function renderStatements() {
+        const container = document.getElementById('statementsList');
+        const allStmts = currentStatements();
+        const filteredStmts = getFilteredStatements();
+        const currentTagId = appState.uiState.currentTagId;
+        const isDefaultTag = (currentTagId === DEFAULT_TAG_ID);
+        
+        if (!filteredStmts.length) {
+            if (currentSearchKeyword && allStmts.length) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-search"></i><p>🔍 没有找到包含 “${escapeHtml(currentSearchKeyword)}” 的语句</p></div>`;
+            } else if (!allStmts.length) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-comment-dots"></i><p>✨ 暂无语句，添加一条吧～</p></div>`;
+            } else {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-search"></i><p>🔍 输入关键词搜索语句</p></div>`;
+            }
+            updateStats();
+            restoreScrollPositions();
+            return;
+        }
+        
+        let html = '';
+        filteredStmts.forEach((stmt, idx) => {
+            const displayText = currentSearchKeyword ? highlightText(stmt.text, currentSearchKeyword) : escapeHtml(stmt.text);
+            html += `
+                <div class="statement-card" data-id="${stmt.id}">
+                    <div class="card-index">#${idx+1}</div>
+                    <div class="card-content">${displayText}</div>
+                    <div class="card-actions">
+                        <button class="icon-btn copy-to-tag-btn" data-action="copyToTag" data-id="${stmt.id}" title="复制到其他标签"><i class="fas fa-share-square"></i></button>
+                        ${!isDefaultTag ? `<button class="icon-btn copy-to-default-btn" data-action="copyToDefault" data-id="${stmt.id}" title="添加到默认语库"><i class="fas fa-star"></i></button>` : ''}
+                        <button class="icon-btn delete-btn" data-action="delete" data-id="${stmt.id}" title="删除"><i class="fas fa-trash-alt"></i></button>
+                        <button class="icon-btn edit-btn" data-action="edit" data-id="${stmt.id}" title="编辑"><i class="fas fa-edit"></i></button>
+                        <button class="icon-btn copy-btn" data-action="copy" data-id="${stmt.id}" title="复制文本"><i class="fas fa-copy"></i></button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        attachCardEvents();
+        updateStats();
+        restoreScrollPositions();
+    }
+
+    function attachCardEvents() {
+        const container = document.getElementById('statementsList');
+        if (!container) return;
+        container.removeEventListener('click', handleCardClick);
+        container.addEventListener('click', handleCardClick);
+    }
+    async function handleCardClick(e) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const id = btn.getAttribute('data-id');
+        const statements = currentStatements(); // 使用原始数据，因为id存在于原始中
+        const stmt = statements.find(s => s.id === id);
+        if (!stmt) return;
+        if (action === 'edit') openEditModal(id);
+        else if (action === 'delete') deleteStatementById(id);
+        else if (action === 'copy') copyStatementText(stmt.text);
+        else if (action === 'copyToTag') showCopyToTagModal(stmt.text);
+        else if (action === 'copyToDefault') copyToDefaultLibrary(stmt.text);
+    }
+    async function copyStatementText(text) {
+        try { await navigator.clipboard.writeText(text); showMessage("✅ 已复制到剪贴板"); } 
+        catch(err) { showMessage("复制失败", true); }
+    }
+    function openEditModal(id) {
+        const stmt = currentStatements().find(s => s.id === id);
+        if (!stmt) return;
+        currentEditId = id;
+        document.getElementById('editTextarea').value = stmt.text;
+        document.getElementById('editModal').style.display = 'flex';
+    }
+    function saveEdit() {
+        const newText = document.getElementById('editTextarea').value.trim();
+        if (!newText) { showMessage("内容不能为空", true); return; }
+        let statements = currentStatements();
+        const idx = statements.findIndex(s => s.id === currentEditId);
+        if (idx !== -1) {
+            const oldText = statements[idx].text;
+            if (oldText.trim() !== newText && isDuplicateInTag(appState.uiState.currentTagId, newText, currentEditId)) {
+                showMessage("❌ 修改后的语句与当前标签下已有语句重复", true);
+                return;
+            }
+            statements[idx].text = newText;
+            setCurrentStatements(statements);
+            showMessage("已更新");
+        }
+        closeEditModal();
+    }
+    function closeEditModal() { document.getElementById('editModal').style.display = 'none'; currentEditId = null; }
+    function deleteStatementById(id) {
+        if (!confirm("删除此语句？")) return;
+        let stmts = currentStatements().filter(s => s.id !== id);
+        setCurrentStatements(stmts);
+        showMessage("已删除");
+    }
+    function addNewStatement() {
+        const input = document.getElementById('newStatementInput');
+        const text = input.value.trim();
+        if (!text) { showMessage("请输入内容", true); return; }
+        const currentTag = appState.uiState.currentTagId;
+        if (isDuplicateInTag(currentTag, text)) {
+            showMessage("❌ 当前标签下已存在相同语句，请勿重复添加", true);
+            return;
+        }
+        const newStmt = { id: generateId(), text };
+        setCurrentStatements([...currentStatements(), newStmt]);
+        input.value = "";
+        showMessage("添加成功");
+        setTimeout(() => { 
+            const mainList = document.getElementById('mainListContainer');
+            if (mainList) mainList.scrollTop = mainList.scrollHeight;
+            saveScrollPositions();
+        }, 50);
+    }
+    function initDragAndDrop() {
+        const container = document.getElementById('statementsList');
+        if (!container || !container.children.length) return;
+        if (sortableInstance) sortableInstance.destroy();
+        // 注意：拖拽操作是基于原始顺序，搜索时不应破坏数据的原始顺序
+        // 但拖拽只应在显示全部时启用，搜索时禁用拖拽更合理。
+        if (currentSearchKeyword) {
+            // 搜索时禁用拖拽，因为显示的是过滤后的列表，拖拽会混乱
+            return;
+        }
+        sortableInstance = new Sortable(container, {
+            animation: 200, handle: '.statement-card', ghostClass: 'sortable-drag', touchStartThreshold: 2,
+            onEnd: function(evt) {
+                if (evt.oldIndex === undefined || evt.newIndex === undefined || evt.oldIndex === evt.newIndex) return;
+                let stmts = currentStatements();
+                const moved = stmts.splice(evt.oldIndex, 1)[0];
+                stmts.splice(evt.newIndex, 0, moved);
+                setCurrentStatements(stmts);
+                showMessage("顺序已更新");
+            }
+        });
+    }
+
+    async function exportFullState() {
+        const exportData = { tags: appState.tags, statementsMap: appState.statementsMap, uiState: appState.uiState, version: "4.3.0", exportDate: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: "application/json"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `deepseek_backup_${new Date().toISOString().slice(0,19)}.json`;
+        a.click();
+        URL.revokeObjectURL(blob);
+        showMessage("已导出完整工作区");
+    }
+    async function importSmart(file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                if (Array.isArray(parsed)) {
+                    if (confirm("检测到旧格式语句列表。是否导入到【当前标签】？(重复语句将被跳过)")) {
+                        let added = 0;
+                        let duplicate = 0;
+                        const currentTag = appState.uiState.currentTagId;
+                        const newList = [...currentStatements()];
+                        for (let item of parsed) {
+                            const txt = (item.text || "").trim();
+                            if (txt && !isDuplicateInTag(currentTag, txt)) {
+                                newList.push({ id: generateId(), text: txt });
+                                added++;
+                            } else if (txt) duplicate++;
+                        }
+                        if (added) setCurrentStatements(newList);
+                        showMessage(`导入完成: 新增 ${added} 条，跳过重复 ${duplicate} 条`);
+                        if (duplicate > 0 && added === 0) showMessage("所有语句均为重复内容，未添加", true);
+                    }
+                    return;
+                }
+                else if (parsed.tags && parsed.statementsMap) {
+                    if (confirm("导入完整备份将覆盖当前所有数据，确定吗？")) {
+                        appState.tags = parsed.tags;
+                        appState.statementsMap = parsed.statementsMap;
+                        appState.uiState = parsed.uiState || { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" };
+                        ensureDefaultTagExists();
+                        const defaultStmts = appState.statementsMap[DEFAULT_TAG_ID] || [];
+                        const unique = [];
+                        const seen = new Set();
+                        for (let s of defaultStmts) {
+                            const key = s.text.trim();
+                            if (!seen.has(key)) { seen.add(key); unique.push(s); }
+                        }
+                        appState.statementsMap[DEFAULT_TAG_ID] = unique;
+                        if (!appState.uiState.currentTagId || !appState.tags.some(t => t.id === appState.uiState.currentTagId)) appState.uiState.currentTagId = DEFAULT_TAG_ID;
+                        currentSearchKeyword = appState.uiState.searchKeyword || "";
+                        await persistState();
+                        renderSidebar(); renderStatements(); updateStats(); initDragAndDrop(); restoreScrollPositions();
+                        showMessage(`导入成功，共 ${appState.tags.length} 个标签`);
+                    }
+                } else throw new Error("格式不支持");
+            } catch(err) { showMessage("导入失败: " + err.message, true); }
+        };
+        reader.readAsText(file);
+    }
+    async function resetToGlobalDefault() {
+        if (!confirm("重置全局会丢失所有自定义数据，恢复为纯净预设（仅默认语库+7条语句）。确定吗？")) return;
+        appState.tags = [{ id: DEFAULT_TAG_ID, name: "默认语库" }];
+        appState.statementsMap = { [DEFAULT_TAG_ID]: getPresetStatements() };
+        appState.uiState.currentTagId = DEFAULT_TAG_ID;
+        appState.uiState.sidebarExpanded = false;
+        appState.uiState.mainListScrollTop = 0;
+        appState.uiState.sidebarScrollTop = 0;
+        appState.uiState.searchKeyword = "";
+        currentSearchKeyword = "";
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = "";
+        document.getElementById('clearSearchBtn').style.display = "none";
+        await persistState();
+        renderSidebar(); renderStatements(); updateStats(); initDragAndDrop(); restoreScrollPositions();
+        showMessage("已恢复纯净预设 (默认语库+7条经典语句)");
+    }
+    function updateStats() { 
+        const filtered = getFilteredStatements();
+        document.querySelector("#statCounter span").innerText = filtered.length;
+    }
+    function showMessage(msg, isErr = false) {
+        let toast = document.getElementById('dynamicToast');
+        if (!toast) { toast = document.createElement('div'); toast.id = 'dynamicToast'; toast.className = 'toast-msg'; document.body.appendChild(toast); }
+        toast.innerHTML = `<i class="fas ${isErr ? 'fa-exclamation-triangle' : 'fa-check-circle'}"></i> ${msg}`;
+        toast.style.background = isErr ? '#c62828e6' : '#1e4a6be6';
+        toast.style.opacity = '1';
+        if (window.toastTimer) clearTimeout(window.toastTimer);
+        window.toastTimer = setTimeout(() => toast.style.opacity = '0', 2000);
+    }
+    function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
+    function initSidebarBehavior() {
+        const sidebar = document.getElementById('sidebar');
+        if (isTouchDevice) {
+            sidebar.classList.add('touch-mode');
+            if (appState.uiState.sidebarExpanded) sidebar.classList.add('expanded');
+            else sidebar.classList.remove('expanded');
+            sidebar.addEventListener('click', (e) => {
+                if (e.target.closest('.delete-tag-icon') || e.target.closest('.add-tag-btn') || e.target.closest('.tag-item')) return;
+                sidebar.classList.toggle('expanded');
+                appState.uiState.sidebarExpanded = sidebar.classList.contains('expanded');
+                persistState();
+            });
+        } else {
+            if (appState.uiState.sidebarExpanded) sidebar.classList.add('expanded');
+            else sidebar.classList.remove('expanded');
+        }
+    }
+    function openTagModal(editTagId = null, existingName = '') {
+        const modal = document.getElementById('tagModal');
+        const title = document.getElementById('tagModalTitle');
+        const input = document.getElementById('tagNameInput');
+        if (editTagId) { title.innerHTML = '<i class="fas fa-edit"></i> 重命名标签'; input.value = existingName; modal._editId = editTagId; }
+        else { title.innerHTML = '<i class="fas fa-plus"></i> 新建标签'; input.value = ''; delete modal._editId; }
+        modal.style.display = 'flex';
+        const confirm = () => {
+            const newName = input.value.trim();
+            if (!newName) { showMessage("标签名不能为空", true); return; }
+            if (modal._editId) {
+                const tag = appState.tags.find(t => t.id === modal._editId);
+                if (tag && tag.id !== DEFAULT_TAG_ID) tag.name = newName;
+                else if(tag && tag.id === DEFAULT_TAG_ID) { showMessage("默认语库名称不可修改", true); closeTagModal(); return; }
+                persistState().then(() => { renderSidebar(); showMessage("已重命名"); });
+            } else {
+                const newId = generateId();
+                appState.tags.push({ id: newId, name: newName });
+                appState.statementsMap[newId] = [];
+                persistState().then(() => { renderSidebar(); if (!appState.uiState.currentTagId) switchToTag(newId); });
+                showMessage("新标签已创建");
+            }
+            closeTagModal();
+        };
+        document.getElementById('confirmTagBtn').onclick = confirm;
+        document.getElementById('cancelTagBtn').onclick = closeTagModal;
+        modal.onclick = (e) => { if (e.target === modal) closeTagModal(); };
+    }
+    function closeTagModal() { document.getElementById('tagModal').style.display = 'none'; }
+
+    (async function() {
+        await loadInitialState();
+        // 恢复搜索关键词
+        currentSearchKeyword = appState.uiState.searchKeyword || "";
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = currentSearchKeyword;
+        document.getElementById('clearSearchBtn').style.display = currentSearchKeyword ? "flex" : "none";
+        renderSidebar();
+        renderStatements();
+        updateStats();
+        initDragAndDrop();
+        initSidebarBehavior();
+        bindScrollMemory();
+        restoreScrollPositions();
+        
+        // 搜索事件绑定
+        const searchInputElem = document.getElementById('searchInput');
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (searchInputElem) {
+            searchInputElem.addEventListener('input', (e) => {
+                performSearch(e.target.value);
+                initDragAndDrop(); // 搜索时拖拽状态更新
+            });
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                clearSearch();
+                initDragAndDrop();
+            });
+        }
+        
+        document.getElementById('addStatementBtn').addEventListener('click', addNewStatement);
+        document.getElementById('newStatementInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') addNewStatement(); });
+        document.getElementById('exportBtn').addEventListener('click', exportFullState);
+        document.getElementById('importFileInput').addEventListener('change', (e) => { if(e.target.files[0]) importSmart(e.target.files[0]); e.target.value=''; });
+        document.getElementById('resetDefaultBtn').addEventListener('click', resetToGlobalDefault);
+        document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
+        document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+        document.getElementById('editModal').addEventListener('click', (e) => { if(e.target === document.getElementById('editModal')) closeEditModal(); });
+        document.getElementById('sidebarAddTagBtn').addEventListener('click', () => openTagModal());
+        document.getElementById('cancelSelectTagBtn').addEventListener('click', closeSelectTagModal);
+        document.getElementById('selectTagModal').addEventListener('click', (e) => { if(e.target === document.getElementById('selectTagModal')) closeSelectTagModal(); });
+    })();
 </script>
 </body>
 </html>
