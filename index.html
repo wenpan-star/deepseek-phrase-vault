@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
-    <title>DeepSeek 语句工坊 | 搜索 · 持久标签</title>
+    <title>DeepSeek 语句工坊 | 搜索 · 持久标签 · 批量</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='80'%3E📦%3C/text%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -17,7 +17,7 @@
         }
         body {
             font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
-            background: linear-gradient(145deg, #f0f4f8 0%, #e6edf2 100%);
+            background: linear-gradient(145deg, #e7eef4 0%, #dce3ea 100%);
             height: 100vh;
             overflow: hidden;
             color: #1a2c3e;
@@ -28,13 +28,14 @@
             width: 100%;
             max-width: 1800px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.35);
+            backdrop-filter: blur(2px);
         }
         .sidebar {
             width: 68px;
-            background: rgba(255,255,255,0.94);
-            backdrop-filter: blur(12px);
-            border-right: 1px solid rgba(0,0,0,0.06);
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(18px);
+            border-right: 1px solid rgba(0,0,0,0.05);
             transition: width 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
             display: flex;
             flex-direction: column;
@@ -59,7 +60,7 @@
             margin-bottom: 8px;
         }
         .sidebar-logo {
-            background: linear-gradient(135deg, #0a5b8c, #1e88e5);
+            background: linear-gradient(135deg, #0e5b8c, #1e88e5);
             width: 38px;
             height: 38px;
             border-radius: 14px;
@@ -67,6 +68,7 @@
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(30,136,229,0.25);
         }
         .sidebar-logo i { font-size: 22px; color: white; }
         .sidebar-title {
@@ -79,8 +81,13 @@
             background-clip: text;
             -webkit-background-clip: text;
             color: transparent;
+            display: none; /* 收起时隐藏 */
         }
-        .sidebar.expanded .sidebar-title, .sidebar:hover .sidebar-title { opacity: 1; }
+        .sidebar.expanded .sidebar-title,
+        .sidebar:not(.touch-mode):hover .sidebar-title {
+            display: block;
+            opacity: 1;
+        }
         .tags-scroll {
             flex: 1;
             overflow-y: auto;
@@ -96,6 +103,21 @@
             cursor: pointer;
             transition: all 0.18s;
             white-space: nowrap;
+            position: relative;
+            overflow: hidden; /* 防止背景溢出 */
+        }
+        .tag-item:hover { background: rgba(25,118,210,0.06); }
+        .tag-color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+            flex-shrink: 0;
+            display: none; /* 收起时隐藏 */
+        }
+        .sidebar.expanded .tag-color-dot,
+        .sidebar:not(.touch-mode):hover .tag-color-dot {
+            display: block;
         }
         .tag-item i { width: 24px; font-size: 1rem; color: #5b7e9e; flex-shrink: 0; }
         .tag-name {
@@ -105,10 +127,12 @@
             color: #2c4c6c;
             overflow: hidden;
             text-overflow: ellipsis;
-            opacity: 0;
-            transition: opacity 0.2s;
+            display: none; /* 收起时隐藏 */
         }
-        .sidebar.expanded .tag-name, .sidebar:hover .tag-name { opacity: 1; }
+        .sidebar.expanded .tag-name,
+        .sidebar:not(.touch-mode):hover .tag-name {
+            display: block;
+        }
         .tag-badge {
             background: #e2ebf3;
             border-radius: 30px;
@@ -116,23 +140,32 @@
             font-size: 0.7rem;
             font-weight: 600;
             color: #2c6b9a;
-            opacity: 0;
+            display: none; /* 收起时隐藏 */
         }
-        .sidebar.expanded .tag-badge, .sidebar:hover .tag-badge { opacity: 1; }
-        .tag-item.active { background: #e3f2fd; }
+        .sidebar.expanded .tag-badge,
+        .sidebar:not(.touch-mode):hover .tag-badge {
+            display: inline;
+        }
+        .tag-item.active {
+            background: #e3f2fd;
+            box-shadow: inset 0 0 0 1px rgba(25,118,210,0.2);
+        }
         .tag-item.active i, .tag-item.active .tag-name { color: #1976d2; font-weight: 600; }
         .delete-tag-icon {
-            opacity: 0;
             background: rgba(0,0,0,0.06);
             border-radius: 50%;
             width: 26px;
             height: 26px;
-            display: inline-flex;
+            display: none; /* 收起时完全隐藏 */
             align-items: center;
             justify-content: center;
             font-size: 12px;
             cursor: pointer;
             color: #8facc0;
+        }
+        .sidebar.expanded .delete-tag-icon,
+        .sidebar:not(.touch-mode):hover .delete-tag-icon {
+            display: inline-flex;
         }
         .tag-item:hover .delete-tag-icon { opacity: 1; }
         .delete-tag-icon:hover { background: #ffcdd2; color: #d32f2f; }
@@ -150,19 +183,24 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
+            transition: background 0.2s;
         }
+        .add-tag-btn:hover { background: #e0e9f5; }
         .add-tag-btn span { display: none; }
-        .sidebar.expanded .add-tag-btn span, .sidebar:hover .add-tag-btn span { display: inline; }
+        .sidebar.expanded .add-tag-btn span,
+        .sidebar:not(.touch-mode):hover .add-tag-btn span {
+            display: inline;
+        }
         .main-content {
             flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            background: rgba(250,252,254,0.4);
+            background: rgba(250,252,254,0.3);
         }
         .app-header {
-            background: rgba(255,255,255,0.75);
-            backdrop-filter: blur(8px);
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(12px);
             padding: 0.7rem 1.8rem;
             display: flex;
             flex-wrap: wrap;
@@ -176,6 +214,7 @@
             background: linear-gradient(135deg, #0a5b8c, #1e88e5);
             width: 44px; height: 44px; border-radius: 18px;
             display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 16px rgba(30,136,229,0.3);
         }
         .title h1 {
             font-size: 1.5rem; font-weight: 700;
@@ -192,9 +231,11 @@
             font-weight: 500; font-size: 0.8rem; display: inline-flex; align-items: center;
             gap: 8px; cursor: pointer; border: 1px solid rgba(0,0,0,0.06);
             background: #ffffffcc; backdrop-filter: blur(2px);
+            transition: all 0.2s;
         }
+        .btn:hover { background: #f5f9ff; border-color: #1976d2; }
         .btn-primary { background: #1976d2; color: white; border: none; }
-        /* 搜索框样式 */
+        .btn-primary:hover { background: #1565c0; }
         .search-wrapper {
             display: flex;
             align-items: center;
@@ -205,60 +246,42 @@
             gap: 8px;
             flex: 1;
             min-width: 180px;
-            max-width: 280px;
+            max-width: 320px;
         }
-        .search-wrapper i {
-            color: #8ba0ae;
-            font-size: 0.9rem;
-        }
+        .search-wrapper i { color: #8ba0ae; font-size: 0.9rem; }
         .search-wrapper input {
-            border: none;
-            padding: 8px 0;
-            font-size: 0.85rem;
-            background: transparent;
-            outline: none;
-            width: 100%;
+            border: none; padding: 8px 0; font-size: 0.85rem; background: transparent; outline: none; width: 100%;
         }
-        .search-wrapper input::placeholder {
-            color: #b8c7d4;
+        .search-wrapper input::placeholder { color: #b8c7d4; }
+        .clear-search, .regex-toggle-btn {
+            background: transparent; border: none; cursor: pointer; color: #8ba0ae; padding: 4px;
+            border-radius: 20px; display: flex; align-items: center; justify-content: center;
         }
-        .clear-search {
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            color: #8ba0ae;
-            padding: 4px;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .clear-search:hover {
-            background: #edf4fa;
-            color: #1976d2;
-        }
+        .clear-search:hover, .regex-toggle-btn:hover { background: #edf4fa; color: #1976d2; }
+        .regex-toggle-btn.active { background: #e3f2fd; color: #1976d2; }
         @media (max-width: 700px) {
-            .app-header {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .search-wrapper {
-                max-width: none;
-                width: 100%;
-            }
-            .header-actions {
-                justify-content: flex-start;
-            }
+            .app-header { flex-direction: column; align-items: stretch; }
+            .search-wrapper { max-width: none; width: 100%; }
+            .header-actions { justify-content: flex-start; }
         }
         .main-list { flex: 1; overflow-y: auto; padding: 1.2rem 1.8rem; }
-        .statements-grid { display: flex; flex-direction: column; gap: 12px; }
+        .batch-bar {
+            display: flex; gap: 12px; align-items: center; padding: 0.5rem 0;
+            background: rgba(255,255,255,0.7); backdrop-filter: blur(4px);
+            border-radius: 40px; margin-bottom: 12px; padding: 8px 16px;
+        }
+        .batch-bar button { font-size: 0.8rem; }
         .statement-card {
             background: white; border-radius: 24px; padding: 0.9rem 1.2rem;
             display: flex; align-items: center; gap: 1rem;
-            border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-            cursor: grab;
+            border: 1px solid rgba(0,0,0,0.04);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+            cursor: grab; transition: box-shadow 0.2s;
         }
+        .statement-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
         .statement-card:active { cursor: grabbing; }
+        .card-checkbox { display: none; margin-right: 4px; }
+        .card-checkbox.visible { display: flex; align-items: center; }
         .card-index {
             font-weight: 600; min-width: 40px; text-align: center;
             background: #f0f4f9; padding: 4px 0; border-radius: 40px; font-size: 0.85rem;
@@ -278,16 +301,33 @@
         }
         .add-wrapper {
             display: flex; gap: 12px; background: white; border-radius: 60px;
-            padding: 0.1rem 0.1rem 0.1rem 1.5rem; border: 1px solid #e2edf3;
+            padding: 0.1rem 0.1rem 0.1rem 1.5rem; border: 1px solid #dce5ec;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
         }
         .add-wrapper input { flex: 1; border: none; padding: 12px 0; font-size: 0.9rem; background: transparent; outline: none; }
-        .add-wrapper button { background: #1976d2; border-radius: 50px; padding: 8px 26px; border: none; color: white; font-weight: 600; cursor: pointer; }
+        .add-wrapper button {
+            background: #1976d2; border-radius: 50px; padding: 8px 26px; border: none; color: white;
+            font-weight: 600; cursor: pointer; transition: background 0.2s;
+        }
+        .add-wrapper button:hover { background: #1565c0; }
         .modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4); backdrop-filter: blur(5px);
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(6px);
             align-items: center; justify-content: center; z-index: 1000;
         }
-        .modal-card { background: white; width: 90%; max-width: 640px; border-radius: 36px; padding: 1.8rem; }
+        .modal-card {
+            background: white; width: 90%; max-width: 640px; border-radius: 36px; padding: 1.8rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+        }
+        .color-picker-row {
+            display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0;
+        }
+        .color-circle {
+            width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: 0.15s;
+        }
+        .color-circle:hover { transform: scale(1.1); }
+        .color-circle.selected { border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.3); }
         .tag-select-list { max-height: 300px; overflow-y: auto; margin: 1rem 0; }
         .tag-option {
             padding: 12px 16px; background: #f8fafc; border-radius: 60px; margin: 8px 0;
@@ -303,11 +343,7 @@
         .empty-state { text-align: center; padding: 3rem; background: #ffffffaa; border-radius: 48px; color: #8ba0ae; }
         .version-footer { text-align: center; font-size: 0.7rem; color: #8ba0ae; padding: 6px 0 10px; background: rgba(255,255,255,0.5); }
         .sortable-drag { opacity: 0.3; background: #e3f2fd; }
-        .search-highlight {
-            background-color: #fff3c9;
-            border-radius: 6px;
-            padding: 0 2px;
-        }
+        .search-highlight { background-color: #fff3c9; border-radius: 6px; padding: 0 2px; }
         @media (max-width: 700px) {
             .sidebar { width: 56px; }
             .sidebar.expanded { width: 220px; }
@@ -333,6 +369,7 @@
             <div class="search-wrapper">
                 <i class="fas fa-search"></i>
                 <input type="text" id="searchInput" placeholder="搜索语句..." autocomplete="off">
+                <button class="regex-toggle-btn" id="regexToggleBtn" title="启用正则表达式搜索"><i class="fas fa-asterisk"></i></button>
                 <button class="clear-search" id="clearSearchBtn" style="display: none;"><i class="fas fa-times-circle"></i></button>
             </div>
             <div class="header-actions">
@@ -343,35 +380,47 @@
                 <button class="btn btn-outline" id="resetDefaultBtn"><i class="fas fa-lightbulb"></i> 重置全局</button>
             </div>
         </div>
-        <div class="main-list" id="mainListContainer"><div id="statementsList" class="statements-grid"></div></div>
+        <div class="main-list" id="mainListContainer">
+            <div id="batchActionBar" class="batch-bar" style="display: none;">
+                <button class="btn btn-outline" id="batchSelectAllBtn">全选</button>
+                <button class="btn btn-outline" id="batchDeleteBtn"><i class="fas fa-trash-alt"></i> 批量删除</button>
+                <button class="btn btn-outline" id="batchMoveBtn"><i class="fas fa-arrow-right"></i> 移动到标签</button>
+                <span id="batchCount" style="font-size:0.85rem;"></span>
+            </div>
+            <div id="statementsList" class="statements-grid"></div>
+        </div>
         <div class="add-section">
             <div class="add-wrapper">
                 <input type="text" id="newStatementInput" placeholder="✍️ 写下新的语句或提示词..." autocomplete="off">
                 <button id="addStatementBtn"><i class="fas fa-plus-circle"></i> 添加</button>
             </div>
         </div>
-        <div class="version-footer">版本 v4.3.0  |  AES-256-GCM 加密  |  实时搜索  |  标签持久保存</div>
+        <div class="version-footer">版本 v4.5.1  |  AES-256-GCM 加密  |  实时搜索 · 批量 · 正则 · 错位修复</div>
     </div>
 </div>
 
-<!-- 编辑模态框 -->
+<!-- 编辑语句模态框 -->
 <div id="editModal" class="modal"><div class="modal-card"><h3><i class="fas fa-pen-fancy"></i> 编辑语句</h3><textarea id="editTextarea" rows="3" style="width:100%; margin: 12px 0; border-radius: 20px; padding: 12px; border:1px solid #ddd;"></textarea><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end;"><button class="btn btn-outline" id="cancelEditBtn">取消</button><button class="btn btn-primary" id="saveEditBtn">保存</button></div></div></div>
-<!-- 新建/重命名标签模态框 -->
-<div id="tagModal" class="modal"><div class="modal-card"><h3 id="tagModalTitle"><i class="fas fa-tag"></i> 标签</h3><input type="text" id="tagNameInput" placeholder="标签名称" maxlength="20" style="width:100%; margin: 12px 0; padding: 10px; border-radius: 40px; border:1px solid #ccc;"><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end;"><button class="btn btn-outline" id="cancelTagBtn">取消</button><button class="btn btn-primary" id="confirmTagBtn">确定</button></div></div></div>
+<!-- 新建/编辑标签模态框 -->
+<div id="tagModal" class="modal"><div class="modal-card"><h3 id="tagModalTitle"><i class="fas fa-tag"></i> 标签</h3><input type="text" id="tagNameInput" placeholder="标签名称" maxlength="20" style="width:100%; margin: 12px 0; padding: 10px; border-radius: 40px; border:1px solid #ccc;"><div class="color-label">标签颜色</div><div id="colorPickerContainer" class="color-picker-row"></div><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;"><button class="btn btn-outline" id="cancelTagBtn">取消</button><button class="btn btn-primary" id="confirmTagBtn">确定</button></div></div></div>
 <!-- 选择目标标签模态框 -->
 <div id="selectTagModal" class="modal"><div class="modal-card"><h3><i class="fas fa-share-alt"></i> 复制语句到标签</h3><div id="tagSelectList" class="tag-select-list"></div><div class="modal-actions" style="display:flex; gap:12px; justify-content:flex-end;"><button class="btn btn-outline" id="cancelSelectTagBtn">取消</button></div></div></div>
 
 <script>
-    // ------------------- Web Crypto AES-256-GCM -------------------
+    // ---------- Web Crypto AES-256-GCM 持久化 ----------
     const PBKDF2_ITERATIONS = 100000;
     const SALT = new Uint8Array([0x3d,0x8e,0x2a,0x1f,0x6c,0xb4,0x5e,0x9a,0x7c,0x2d,0x4b,0x8a,0x1e,0x3c,0x6f,0x9d]);
-    const ENCRYPT_KEY_STR = "deepseek-statement-vault-2025-v3";
+    const ENCRYPT_KEY_STR = "deepseek-statement-vault-2025-v4";
+    let cryptoAvailable = true;
+    try { crypto.subtle; } catch(e) { cryptoAvailable = false; }
     async function getEncryptionKey() {
+        if (!cryptoAvailable) throw new Error('Crypto unavailable');
         const enc = new TextEncoder();
         const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(ENCRYPT_KEY_STR), "PBKDF2", false, ["deriveKey"]);
         return crypto.subtle.deriveKey({ name: "PBKDF2", salt: SALT, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
     }
     async function encryptState(dataObj) {
+        if (!cryptoAvailable) return JSON.stringify(dataObj);
         const plaintext = JSON.stringify(dataObj);
         const data = new TextEncoder().encode(plaintext);
         const key = await getEncryptionKey();
@@ -382,6 +431,7 @@
         return btoa(String.fromCharCode(...combined));
     }
     async function decryptState(encryptedBase64) {
+        if (!cryptoAvailable) { try { return JSON.parse(encryptedBase64); } catch(e) { return null; } }
         try {
             const binary = atob(encryptedBase64);
             const combined = new Uint8Array(binary.length);
@@ -394,17 +444,20 @@
         } catch(e) { return null; }
     }
 
+    const STORAGE_KEY = "ds_encrypted_vault_v4";
     const DEFAULT_TAG_ID = "default_main_tag_001";
+    const PRESET_COLORS = ['#1976d2','#e53935','#43a047','#fb8c00','#8e24aa','#00acc1','#3949ab','#d81b60','#00897b','#7cb342','#5e35b1','#546e7a'];
     
-    let appState = { tags: [], statementsMap: {}, uiState: { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" } };
+    let appState = { tags: [], statementsMap: {}, uiState: { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "", useRegex: false } };
     let sortableInstance = null;
     let currentEditId = null;
     let isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     let pendingCopyStatementText = null;
     let scrollSaveTimer = null;
+    let selectedStatementIds = new Set();
+    let currentTagColor = null;
 
     function generateId() { return Date.now() + '-' + Math.random().toString(36).substring(2, 10); }
-
     function isDuplicateInTag(tagId, text, excludeStatementId = null) {
         const statements = appState.statementsMap[tagId] || [];
         const normalized = text.trim();
@@ -414,7 +467,7 @@
     function ensureDefaultTagExists() {
         const hasDefault = appState.tags.some(t => t.id === DEFAULT_TAG_ID);
         if (!hasDefault) {
-            appState.tags.unshift({ id: DEFAULT_TAG_ID, name: "默认语库" });
+            appState.tags.unshift({ id: DEFAULT_TAG_ID, name: "默认语库", color: null });
             if (!appState.statementsMap[DEFAULT_TAG_ID]) appState.statementsMap[DEFAULT_TAG_ID] = [];
         } else {
             const defaultTag = appState.tags.find(t => t.id === DEFAULT_TAG_ID);
@@ -440,7 +493,7 @@
     async function persistState() {
         const toStore = { tags: appState.tags, statementsMap: appState.statementsMap, uiState: appState.uiState };
         const encrypted = await encryptState(toStore);
-        localStorage.setItem("ds_encrypted_vault_v3", encrypted);
+        localStorage.setItem(STORAGE_KEY, encrypted);
     }
 
     function saveScrollPositions() {
@@ -474,17 +527,14 @@
     }
 
     async function loadInitialState() {
-        const raw = localStorage.getItem("ds_encrypted_vault_v3");
+        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("ds_encrypted_vault_v3");
         if (raw) {
             const decrypted = await decryptState(raw);
             if (decrypted && decrypted.tags && decrypted.statementsMap) {
                 appState.tags = decrypted.tags;
                 appState.statementsMap = decrypted.statementsMap;
-                appState.uiState = decrypted.uiState || { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" };
-                if (typeof appState.uiState.mainListScrollTop !== 'number') appState.uiState.mainListScrollTop = 0;
-                if (typeof appState.uiState.sidebarScrollTop !== 'number') appState.uiState.sidebarScrollTop = 0;
-                if (typeof appState.uiState.searchKeyword !== 'string') appState.uiState.searchKeyword = "";
-                for (let tid in appState.statementsMap) if (!Array.isArray(appState.statementsMap[tid])) appState.statementsMap[tid] = [];
+                appState.uiState = decrypted.uiState || { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "", useRegex: false };
+                for (let tag of appState.tags) if (!tag.color) tag.color = null;
                 ensureDefaultTagExists();
                 if (appState.statementsMap[DEFAULT_TAG_ID].length === 0) {
                     appState.statementsMap[DEFAULT_TAG_ID] = getPresetStatements();
@@ -493,47 +543,63 @@
                 return;
             }
         }
-        appState.tags = [{ id: DEFAULT_TAG_ID, name: "默认语库" }];
+        appState.tags = [{ id: DEFAULT_TAG_ID, name: "默认语库", color: null }];
         appState.statementsMap = { [DEFAULT_TAG_ID]: getPresetStatements() };
-        appState.uiState = { currentTagId: DEFAULT_TAG_ID, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" };
+        appState.uiState = { currentTagId: DEFAULT_TAG_ID, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "", useRegex: false };
         await persistState();
     }
 
-    // 搜索相关
     let currentSearchKeyword = "";
+    let useRegexMode = false;
     function updateSearchUI() {
         const searchInput = document.getElementById('searchInput');
         const clearBtn = document.getElementById('clearSearchBtn');
-        if (searchInput) {
-            searchInput.value = currentSearchKeyword;
-            if (clearBtn) clearBtn.style.display = currentSearchKeyword ? "flex" : "none";
-        }
-        renderStatements();  // 重新渲染以应用高亮和过滤
+        if (searchInput) searchInput.value = currentSearchKeyword;
+        if (clearBtn) clearBtn.style.display = currentSearchKeyword ? "flex" : "none";
+        document.getElementById('regexToggleBtn').classList.toggle('active', useRegexMode);
+        renderStatements();
     }
-    function performSearch(keyword) {
+    function performSearch(keyword, regexMode) {
         currentSearchKeyword = keyword.trim();
+        useRegexMode = !!regexMode;
         appState.uiState.searchKeyword = currentSearchKeyword;
+        appState.uiState.useRegex = useRegexMode;
         persistState();
         updateSearchUI();
     }
     function clearSearch() {
-        performSearch("");
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) searchInput.value = "";
+        performSearch("", false);
     }
 
-    // 高亮文本
-    function highlightText(text, keyword) {
+    function matchSearch(text, keyword, useRegex) {
+        if (!keyword) return true;
+        if (useRegex) {
+            try { const re = new RegExp(keyword, 'gi'); return re.test(text); }
+            catch(e) { return false; }
+        } else {
+            const words = keyword.split(/\s+/).filter(Boolean);
+            const lowerText = text.toLowerCase();
+            return words.every(w => lowerText.includes(w.toLowerCase()));
+        }
+    }
+
+    function highlightText(text, keyword, useRegex) {
         if (!keyword) return escapeHtml(text);
-        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(${escapedKeyword})`, 'gi');
-        const parts = text.split(regex);
-        return parts.map(part => {
-            if (part.toLowerCase() === keyword.toLowerCase()) {
-                return `<span class="search-highlight">${escapeHtml(part)}</span>`;
-            }
-            return escapeHtml(part);
-        }).join('');
+        if (useRegex) {
+            try {
+                const re = new RegExp(`(${keyword})`, 'gi');
+                return escapeHtml(text).replace(re, '<span class="search-highlight">$1</span>');
+            } catch(e) { return escapeHtml(text); }
+        } else {
+            const words = keyword.split(/\s+/).filter(Boolean);
+            let result = escapeHtml(text);
+            words.forEach(w => {
+                const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const re = new RegExp(`(${escaped})`, 'gi');
+                result = result.replace(re, '<span class="search-highlight">$1</span>');
+            });
+            return result;
+        }
     }
 
     function currentStatements() {
@@ -544,21 +610,90 @@
     function getFilteredStatements() {
         const all = currentStatements();
         if (!currentSearchKeyword) return all;
-        const lowerKeyword = currentSearchKeyword.toLowerCase();
-        return all.filter(stmt => stmt.text.toLowerCase().includes(lowerKeyword));
+        return all.filter(stmt => matchSearch(stmt.text, currentSearchKeyword, useRegexMode));
     }
 
     function setCurrentStatements(newList) {
         if (!appState.uiState.currentTagId) return;
         appState.statementsMap[appState.uiState.currentTagId] = newList;
-        persistState().then(() => { 
-            // 如果当前有搜索关键词，需要重新触发渲染以更新过滤后的列表
-            renderStatements(); 
-            updateStats(); 
-            initDragAndDrop(); 
-            renderSidebar(); 
-            restoreScrollPositions();
+        selectedStatementIds.clear();
+        updateBatchUI();
+        persistState().then(() => { renderStatements(); updateStats(); initDragAndDrop(); renderSidebar(); restoreScrollPositions(); });
+    }
+
+    function updateBatchUI() {
+        const bar = document.getElementById('batchActionBar');
+        const countSpan = document.getElementById('batchCount');
+        if (!bar || !countSpan) return;
+        if (selectedStatementIds.size > 0) {
+            bar.style.display = 'flex';
+            countSpan.innerText = `已选 ${selectedStatementIds.size} 条`;
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+    function toggleSelectAll() {
+        const filtered = getFilteredStatements();
+        if (selectedStatementIds.size === filtered.length && filtered.length > 0) {
+            selectedStatementIds.clear();
+        } else {
+            filtered.forEach(stmt => selectedStatementIds.add(stmt.id));
+        }
+        updateBatchUI();
+        renderStatements();
+    }
+    function toggleSelectStatement(id) {
+        if (selectedStatementIds.has(id)) selectedStatementIds.delete(id);
+        else selectedStatementIds.add(id);
+        updateBatchUI();
+        renderStatements();
+    }
+    function batchDeleteSelected() {
+        if (selectedStatementIds.size === 0) return;
+        if (!confirm(`确定删除选中的 ${selectedStatementIds.size} 条语句吗？`)) return;
+        let stmts = currentStatements().filter(s => !selectedStatementIds.has(s.id));
+        setCurrentStatements(stmts);
+        selectedStatementIds.clear();
+        showMessage("批量删除完成");
+    }
+    function batchMoveToTag() {
+        if (selectedStatementIds.size === 0) return;
+        const otherTags = appState.tags.filter(t => t.id !== appState.uiState.currentTagId);
+        if (otherTags.length === 0) { showMessage("没有其他标签可移动", true); return; }
+        const listContainer = document.getElementById('tagSelectList');
+        listContainer.innerHTML = '';
+        otherTags.forEach(tag => {
+            const div = document.createElement('div');
+            div.className = 'tag-option';
+            const colorDot = tag.color ? `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${tag.color};margin-right:8px;"></span>` : '';
+            div.innerHTML = `${colorDot} ${escapeHtml(tag.name)} (${(appState.statementsMap[tag.id]||[]).length}条)`;
+            div.addEventListener('click', () => {
+                const targetId = tag.id;
+                const currentList = currentStatements();
+                const toMove = currentList.filter(s => selectedStatementIds.has(s.id));
+                const remaining = currentList.filter(s => !selectedStatementIds.has(s.id));
+                let duplicates = 0;
+                const targetList = [...(appState.statementsMap[targetId] || [])];
+                toMove.forEach(stmt => {
+                    if (isDuplicateInTag(targetId, stmt.text)) duplicates++;
+                    else targetList.push({ ...stmt, id: generateId() });
+                });
+                appState.statementsMap[appState.uiState.currentTagId] = remaining;
+                appState.statementsMap[targetId] = targetList;
+                selectedStatementIds.clear();
+                persistState().then(() => {
+                    renderSidebar();
+                    renderStatements();
+                    updateStats();
+                    updateBatchUI();
+                    showMessage(`移动完成，${toMove.length - duplicates} 条已移至「${tag.name}」${duplicates ? '，'+duplicates+' 条重复未移动' : ''}`);
+                });
+                closeSelectTagModal();
+            });
+            listContainer.appendChild(div);
         });
+        document.getElementById('selectTagModal').style.display = 'flex';
+        document.getElementById('selectTagModal')._batchMode = true;
     }
 
     function renderSidebar() {
@@ -569,8 +704,10 @@
             const count = (appState.statementsMap[tag.id] || []).length;
             const activeClass = (appState.uiState.currentTagId === tag.id) ? 'active' : '';
             const isDefault = (tag.id === DEFAULT_TAG_ID);
+            const colorDot = tag.color ? `<span class="tag-color-dot" style="background:${tag.color};"></span>` : `<span class="tag-color-dot" style="background:#ccc;"></span>`;
             html += `
-                <div class="tag-item ${activeClass}" data-tag-id="${tag.id}">
+                <div class="tag-item ${activeClass}" data-tag-id="${tag.id}" ondblclick="event.stopPropagation(); openTagModal('${tag.id}', '${escapeHtml(tag.name).replace(/'/g, "\\'")}', '${tag.color||''}')">
+                    ${colorDot}
                     <i class="fas ${isDefault ? 'fa-home' : 'fa-tag'}"></i>
                     <span class="tag-name">${escapeHtml(tag.name)}</span>
                     <span class="tag-badge">${count}</span>
@@ -590,22 +727,20 @@
         document.querySelectorAll('.delete-tag-icon').forEach(btn => {
             btn.addEventListener('click', (e) => { e.stopPropagation(); const tid = btn.getAttribute('data-tag-id'); if(tid) deleteTagById(tid); });
         });
-        const sidebarScroll = document.querySelector('.tags-scroll');
-        if (sidebarScroll && typeof appState.uiState.sidebarScrollTop === 'number') {
-            sidebarScroll.scrollTop = appState.uiState.sidebarScrollTop;
-        }
     }
 
     function switchToTag(tagId) {
         if (!appState.tags.find(t => t.id === tagId)) return;
         appState.uiState.currentTagId = tagId;
-        // 切换标签时清空搜索关键词，避免残留
+        selectedStatementIds.clear();
         if (currentSearchKeyword) {
             currentSearchKeyword = "";
             appState.uiState.searchKeyword = "";
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) searchInput.value = "";
+            useRegexMode = false;
+            appState.uiState.useRegex = false;
+            document.getElementById('searchInput').value = "";
             document.getElementById('clearSearchBtn').style.display = "none";
+            document.getElementById('regexToggleBtn').classList.remove('active');
         }
         persistState();
         renderSidebar();
@@ -613,6 +748,7 @@
         updateStats();
         initDragAndDrop();
         restoreScrollPositions();
+        updateBatchUI();
     }
 
     async function deleteTagById(tagId) {
@@ -623,11 +759,7 @@
             delete appState.statementsMap[tagId];
             if (appState.uiState.currentTagId === tagId) appState.uiState.currentTagId = DEFAULT_TAG_ID;
             await persistState();
-            renderSidebar();
-            renderStatements();
-            updateStats();
-            initDragAndDrop();
-            restoreScrollPositions();
+            renderSidebar(); renderStatements(); updateStats(); initDragAndDrop(); restoreScrollPositions();
             showMessage("标签已删除");
         }
     }
@@ -641,21 +773,21 @@
         otherTags.forEach(tag => {
             const div = document.createElement('div');
             div.className = 'tag-option';
-            div.innerHTML = `<i class="fas fa-tag"></i> ${escapeHtml(tag.name)} (${(appState.statementsMap[tag.id] || []).length}条)`;
+            const colorDot = tag.color ? `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${tag.color};margin-right:8px;"></span>` : '';
+            div.innerHTML = `${colorDot} ${escapeHtml(tag.name)} (${(appState.statementsMap[tag.id]||[]).length}条)`;
             div.addEventListener('click', () => {
-                const targetId = tag.id;
-                const trimmedText = pendingCopyStatementText.trim();
-                if (isDuplicateInTag(targetId, trimmedText)) {
-                    showMessage(`❌ 目标标签「${tag.name}」中已存在相同语句，无法复制`, true);
+                const trimmed = pendingCopyStatementText.trim();
+                if (isDuplicateInTag(tag.id, trimmed)) {
+                    showMessage(`❌ 目标标签「${tag.name}」中已存在相同语句`, true);
                     closeSelectTagModal();
                     return;
                 }
-                const newStmt = { id: generateId(), text: trimmedText };
-                if (!appState.statementsMap[targetId]) appState.statementsMap[targetId] = [];
-                appState.statementsMap[targetId].push(newStmt);
+                const newStmt = { id: generateId(), text: trimmed };
+                if (!appState.statementsMap[tag.id]) appState.statementsMap[tag.id] = [];
+                appState.statementsMap[tag.id].push(newStmt);
                 persistState().then(() => {
                     renderSidebar();
-                    if (appState.uiState.currentTagId === targetId) renderStatements();
+                    if (appState.uiState.currentTagId === tag.id) renderStatements();
                     showMessage(`✅ 已复制到「${tag.name}」`);
                 });
                 closeSelectTagModal();
@@ -663,14 +795,18 @@
             listContainer.appendChild(div);
         });
         document.getElementById('selectTagModal').style.display = 'flex';
+        document.getElementById('selectTagModal')._batchMode = false;
     }
-    function closeSelectTagModal() { document.getElementById('selectTagModal').style.display = 'none'; pendingCopyStatementText = null; }
+    function closeSelectTagModal() {
+        document.getElementById('selectTagModal').style.display = 'none';
+        pendingCopyStatementText = null;
+    }
     
     async function copyToDefaultLibrary(statementText) {
         if (appState.uiState.currentTagId === DEFAULT_TAG_ID) { showMessage("当前已在默认语库", true); return; }
         const trimmed = statementText.trim();
         if (isDuplicateInTag(DEFAULT_TAG_ID, trimmed)) {
-            showMessage(`❌ 默认语库中已存在相同语句，无法添加`, true);
+            showMessage(`❌ 默认语库中已存在相同语句`, true);
             return;
         }
         const newStmt = { id: generateId(), text: trimmed };
@@ -697,16 +833,17 @@
             } else {
                 container.innerHTML = `<div class="empty-state"><i class="fas fa-search"></i><p>🔍 输入关键词搜索语句</p></div>`;
             }
-            updateStats();
-            restoreScrollPositions();
+            updateStats(); updateBatchUI(); restoreScrollPositions();
             return;
         }
         
         let html = '';
         filteredStmts.forEach((stmt, idx) => {
-            const displayText = currentSearchKeyword ? highlightText(stmt.text, currentSearchKeyword) : escapeHtml(stmt.text);
+            const displayText = currentSearchKeyword ? highlightText(stmt.text, currentSearchKeyword, useRegexMode) : escapeHtml(stmt.text);
+            const checked = selectedStatementIds.has(stmt.id) ? 'checked' : '';
             html += `
                 <div class="statement-card" data-id="${stmt.id}">
+                    <input type="checkbox" class="card-checkbox visible" data-id="${stmt.id}" ${checked} onclick="event.stopPropagation(); toggleSelectStatement('${stmt.id}')">
                     <div class="card-index">#${idx+1}</div>
                     <div class="card-content">${displayText}</div>
                     <div class="card-actions">
@@ -722,6 +859,7 @@
         container.innerHTML = html;
         attachCardEvents();
         updateStats();
+        updateBatchUI();
         restoreScrollPositions();
     }
 
@@ -736,8 +874,7 @@
         if (!btn) return;
         const action = btn.getAttribute('data-action');
         const id = btn.getAttribute('data-id');
-        const statements = currentStatements(); // 使用原始数据，因为id存在于原始中
-        const stmt = statements.find(s => s.id === id);
+        const stmt = currentStatements().find(s => s.id === id);
         if (!stmt) return;
         if (action === 'edit') openEditModal(id);
         else if (action === 'delete') deleteStatementById(id);
@@ -745,8 +882,9 @@
         else if (action === 'copyToTag') showCopyToTagModal(stmt.text);
         else if (action === 'copyToDefault') copyToDefaultLibrary(stmt.text);
     }
+
     async function copyStatementText(text) {
-        try { await navigator.clipboard.writeText(text); showMessage("✅ 已复制到剪贴板"); } 
+        try { await navigator.clipboard.writeText(text); showMessage("✅ 已复制到剪贴板"); }
         catch(err) { showMessage("复制失败", true); }
     }
     function openEditModal(id) {
@@ -762,8 +900,7 @@
         let statements = currentStatements();
         const idx = statements.findIndex(s => s.id === currentEditId);
         if (idx !== -1) {
-            const oldText = statements[idx].text;
-            if (oldText.trim() !== newText && isDuplicateInTag(appState.uiState.currentTagId, newText, currentEditId)) {
+            if (statements[idx].text.trim() !== newText && isDuplicateInTag(appState.uiState.currentTagId, newText, currentEditId)) {
                 showMessage("❌ 修改后的语句与当前标签下已有语句重复", true);
                 return;
             }
@@ -777,6 +914,7 @@
     function deleteStatementById(id) {
         if (!confirm("删除此语句？")) return;
         let stmts = currentStatements().filter(s => s.id !== id);
+        selectedStatementIds.delete(id);
         setCurrentStatements(stmts);
         showMessage("已删除");
     }
@@ -784,16 +922,15 @@
         const input = document.getElementById('newStatementInput');
         const text = input.value.trim();
         if (!text) { showMessage("请输入内容", true); return; }
-        const currentTag = appState.uiState.currentTagId;
-        if (isDuplicateInTag(currentTag, text)) {
-            showMessage("❌ 当前标签下已存在相同语句，请勿重复添加", true);
+        if (isDuplicateInTag(appState.uiState.currentTagId, text)) {
+            showMessage("❌ 当前标签下已存在相同语句", true);
             return;
         }
         const newStmt = { id: generateId(), text };
         setCurrentStatements([...currentStatements(), newStmt]);
         input.value = "";
         showMessage("添加成功");
-        setTimeout(() => { 
+        setTimeout(() => {
             const mainList = document.getElementById('mainListContainer');
             if (mainList) mainList.scrollTop = mainList.scrollHeight;
             saveScrollPositions();
@@ -803,12 +940,7 @@
         const container = document.getElementById('statementsList');
         if (!container || !container.children.length) return;
         if (sortableInstance) sortableInstance.destroy();
-        // 注意：拖拽操作是基于原始顺序，搜索时不应破坏数据的原始顺序
-        // 但拖拽只应在显示全部时启用，搜索时禁用拖拽更合理。
-        if (currentSearchKeyword) {
-            // 搜索时禁用拖拽，因为显示的是过滤后的列表，拖拽会混乱
-            return;
-        }
+        if (currentSearchKeyword) return;
         sortableInstance = new Sortable(container, {
             animation: 200, handle: '.statement-card', ghostClass: 'sortable-drag', touchStartThreshold: 2,
             onEnd: function(evt) {
@@ -823,7 +955,7 @@
     }
 
     async function exportFullState() {
-        const exportData = { tags: appState.tags, statementsMap: appState.statementsMap, uiState: appState.uiState, version: "4.3.0", exportDate: new Date().toISOString() };
+        const exportData = { tags: appState.tags, statementsMap: appState.statementsMap, uiState: appState.uiState, version: "4.5.1", exportDate: new Date().toISOString() };
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: "application/json"});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -839,39 +971,28 @@
                 const parsed = JSON.parse(e.target.result);
                 if (Array.isArray(parsed)) {
                     if (confirm("检测到旧格式语句列表。是否导入到【当前标签】？(重复语句将被跳过)")) {
-                        let added = 0;
-                        let duplicate = 0;
-                        const currentTag = appState.uiState.currentTagId;
+                        let added = 0, duplicate = 0;
                         const newList = [...currentStatements()];
                         for (let item of parsed) {
                             const txt = (item.text || "").trim();
-                            if (txt && !isDuplicateInTag(currentTag, txt)) {
-                                newList.push({ id: generateId(), text: txt });
-                                added++;
+                            if (txt && !isDuplicateInTag(appState.uiState.currentTagId, txt)) {
+                                newList.push({ id: generateId(), text: txt }); added++;
                             } else if (txt) duplicate++;
                         }
                         if (added) setCurrentStatements(newList);
                         showMessage(`导入完成: 新增 ${added} 条，跳过重复 ${duplicate} 条`);
-                        if (duplicate > 0 && added === 0) showMessage("所有语句均为重复内容，未添加", true);
                     }
                     return;
-                }
-                else if (parsed.tags && parsed.statementsMap) {
+                } else if (parsed.tags && parsed.statementsMap) {
                     if (confirm("导入完整备份将覆盖当前所有数据，确定吗？")) {
                         appState.tags = parsed.tags;
                         appState.statementsMap = parsed.statementsMap;
-                        appState.uiState = parsed.uiState || { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "" };
+                        appState.uiState = parsed.uiState || { currentTagId: null, sidebarExpanded: false, mainListScrollTop: 0, sidebarScrollTop: 0, searchKeyword: "", useRegex: false };
+                        for (let tag of appState.tags) if (!tag.color) tag.color = null;
                         ensureDefaultTagExists();
-                        const defaultStmts = appState.statementsMap[DEFAULT_TAG_ID] || [];
-                        const unique = [];
-                        const seen = new Set();
-                        for (let s of defaultStmts) {
-                            const key = s.text.trim();
-                            if (!seen.has(key)) { seen.add(key); unique.push(s); }
-                        }
-                        appState.statementsMap[DEFAULT_TAG_ID] = unique;
                         if (!appState.uiState.currentTagId || !appState.tags.some(t => t.id === appState.uiState.currentTagId)) appState.uiState.currentTagId = DEFAULT_TAG_ID;
                         currentSearchKeyword = appState.uiState.searchKeyword || "";
+                        useRegexMode = appState.uiState.useRegex || false;
                         await persistState();
                         renderSidebar(); renderStatements(); updateStats(); initDragAndDrop(); restoreScrollPositions();
                         showMessage(`导入成功，共 ${appState.tags.length} 个标签`);
@@ -883,20 +1004,18 @@
     }
     async function resetToGlobalDefault() {
         if (!confirm("重置全局会丢失所有自定义数据，恢复为纯净预设（仅默认语库+7条语句）。确定吗？")) return;
-        appState.tags = [{ id: DEFAULT_TAG_ID, name: "默认语库" }];
+        appState.tags = [{ id: DEFAULT_TAG_ID, name: "默认语库", color: null }];
         appState.statementsMap = { [DEFAULT_TAG_ID]: getPresetStatements() };
         appState.uiState.currentTagId = DEFAULT_TAG_ID;
         appState.uiState.sidebarExpanded = false;
-        appState.uiState.mainListScrollTop = 0;
-        appState.uiState.sidebarScrollTop = 0;
         appState.uiState.searchKeyword = "";
-        currentSearchKeyword = "";
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) searchInput.value = "";
+        appState.uiState.useRegex = false;
+        currentSearchKeyword = ""; useRegexMode = false;
+        document.getElementById('searchInput').value = "";
         document.getElementById('clearSearchBtn').style.display = "none";
         await persistState();
         renderSidebar(); renderStatements(); updateStats(); initDragAndDrop(); restoreScrollPositions();
-        showMessage("已恢复纯净预设 (默认语库+7条经典语句)");
+        showMessage("已恢复纯净预设");
     }
     function updateStats() { 
         const filtered = getFilteredStatements();
@@ -929,24 +1048,60 @@
             else sidebar.classList.remove('expanded');
         }
     }
-    function openTagModal(editTagId = null, existingName = '') {
+
+    function openTagModal(editTagId = null, existingName = '', existingColor = null) {
         const modal = document.getElementById('tagModal');
         const title = document.getElementById('tagModalTitle');
         const input = document.getElementById('tagNameInput');
-        if (editTagId) { title.innerHTML = '<i class="fas fa-edit"></i> 重命名标签'; input.value = existingName; modal._editId = editTagId; }
-        else { title.innerHTML = '<i class="fas fa-plus"></i> 新建标签'; input.value = ''; delete modal._editId; }
+        const colorContainer = document.getElementById('colorPickerContainer');
+        currentTagColor = existingColor || null;
+        if (editTagId) {
+            title.innerHTML = '<i class="fas fa-edit"></i> 编辑标签';
+            input.value = existingName;
+            modal._editId = editTagId;
+        } else {
+            title.innerHTML = '<i class="fas fa-plus"></i> 新建标签';
+            input.value = '';
+            delete modal._editId;
+            currentTagColor = null;
+        }
+        colorContainer.innerHTML = '';
+        PRESET_COLORS.forEach(color => {
+            const circle = document.createElement('div');
+            circle.className = 'color-circle' + (color === currentTagColor ? ' selected' : '');
+            circle.style.backgroundColor = color;
+            circle.addEventListener('click', () => {
+                document.querySelectorAll('#colorPickerContainer .color-circle').forEach(c => c.classList.remove('selected'));
+                circle.classList.add('selected');
+                currentTagColor = color;
+            });
+            colorContainer.appendChild(circle);
+        });
+        const noneCircle = document.createElement('div');
+        noneCircle.className = 'color-circle' + (!currentTagColor ? ' selected' : '');
+        noneCircle.style.backgroundColor = '#e0e0e0';
+        noneCircle.title = '无颜色';
+        noneCircle.addEventListener('click', () => {
+            document.querySelectorAll('#colorPickerContainer .color-circle').forEach(c => c.classList.remove('selected'));
+            noneCircle.classList.add('selected');
+            currentTagColor = null;
+        });
+        colorContainer.appendChild(noneCircle);
         modal.style.display = 'flex';
         const confirm = () => {
             const newName = input.value.trim();
             if (!newName) { showMessage("标签名不能为空", true); return; }
             if (modal._editId) {
                 const tag = appState.tags.find(t => t.id === modal._editId);
-                if (tag && tag.id !== DEFAULT_TAG_ID) tag.name = newName;
-                else if(tag && tag.id === DEFAULT_TAG_ID) { showMessage("默认语库名称不可修改", true); closeTagModal(); return; }
-                persistState().then(() => { renderSidebar(); showMessage("已重命名"); });
+                if (tag) {
+                    if (tag.id === DEFAULT_TAG_ID) { showMessage("默认语库名称不可修改", true); closeTagModal(); return; }
+                    tag.name = newName;
+                    tag.color = currentTagColor;
+                }
+                persistState().then(() => { renderSidebar(); showMessage("已更新"); });
             } else {
                 const newId = generateId();
-                appState.tags.push({ id: newId, name: newName });
+                appState.tags.push({ id: newId, name: newName, color: currentTagColor });
                 appState.statementsMap[newId] = [];
                 persistState().then(() => { renderSidebar(); if (!appState.uiState.currentTagId) switchToTag(newId); });
                 showMessage("新标签已创建");
@@ -959,13 +1114,35 @@
     }
     function closeTagModal() { document.getElementById('tagModal').style.display = 'none'; }
 
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            if (e.key === 'Escape') { e.target.blur(); return; }
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            document.getElementById('searchInput').focus();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+            e.preventDefault();
+            document.getElementById('newStatementInput').focus();
+        } else if (e.key === 'Escape') {
+            closeEditModal();
+            closeTagModal();
+            closeSelectTagModal();
+            clearSearch();
+            document.getElementById('searchInput').blur();
+        } else if (e.key === 'Delete' && selectedStatementIds.size > 0) {
+            batchDeleteSelected();
+        }
+    });
+
     (async function() {
         await loadInitialState();
-        // 恢复搜索关键词
         currentSearchKeyword = appState.uiState.searchKeyword || "";
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) searchInput.value = currentSearchKeyword;
+        useRegexMode = appState.uiState.useRegex || false;
+        document.getElementById('searchInput').value = currentSearchKeyword;
         document.getElementById('clearSearchBtn').style.display = currentSearchKeyword ? "flex" : "none";
+        document.getElementById('regexToggleBtn').classList.toggle('active', useRegexMode);
         renderSidebar();
         renderStatements();
         updateStats();
@@ -974,18 +1151,27 @@
         bindScrollMemory();
         restoreScrollPositions();
         
-        // 搜索事件绑定
         const searchInputElem = document.getElementById('searchInput');
         const clearBtn = document.getElementById('clearSearchBtn');
+        const regexToggle = document.getElementById('regexToggleBtn');
         if (searchInputElem) {
             searchInputElem.addEventListener('input', (e) => {
-                performSearch(e.target.value);
-                initDragAndDrop(); // 搜索时拖拽状态更新
+                performSearch(e.target.value, useRegexMode);
+                initDragAndDrop();
             });
         }
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 clearSearch();
+                initDragAndDrop();
+            });
+        }
+        if (regexToggle) {
+            regexToggle.addEventListener('click', () => {
+                useRegexMode = !useRegexMode;
+                appState.uiState.useRegex = useRegexMode;
+                performSearch(currentSearchKeyword, useRegexMode);
+                persistState();
                 initDragAndDrop();
             });
         }
@@ -1001,6 +1187,9 @@
         document.getElementById('sidebarAddTagBtn').addEventListener('click', () => openTagModal());
         document.getElementById('cancelSelectTagBtn').addEventListener('click', closeSelectTagModal);
         document.getElementById('selectTagModal').addEventListener('click', (e) => { if(e.target === document.getElementById('selectTagModal')) closeSelectTagModal(); });
+        document.getElementById('batchSelectAllBtn').addEventListener('click', toggleSelectAll);
+        document.getElementById('batchDeleteBtn').addEventListener('click', batchDeleteSelected);
+        document.getElementById('batchMoveBtn').addEventListener('click', batchMoveToTag);
     })();
 </script>
 </body>
