@@ -62,7 +62,7 @@
 //       把 vault.uiState.sidebarExpanded 的权威值同步到 sidebar.js。
 //     · 该调用是幂等的（值相同时立即返回），无副作用。
 //
-// 【第二批重构（本轮）】
+// 【第二批重构（历史）】
 //   问题 I（bootstrap 未处理 initializeFacade 返回 null）：
 //     FA-4 修复后，initializeFacade 在 loadVaultFromStorage 抛异常时
 //     会返回 null（而非抛异常）。但 bootstrap 未检查返回值，直接
@@ -297,7 +297,9 @@ async function bootstrap() {
     initializeToast();
 
     // 3. 初始化 Facade（从存储加载 Vault）
-    const loadedVault = await initializeFacade({ toastHandler: showMessage });
+    const loadedVault = await initializeFacade({
+        toastHandler: showMessage
+    });
 
     // ---------- 【问题 I 修复】检查加载结果 ----------
     if (!loadedVault) {
@@ -1496,4 +1498,409 @@ function handleOpenAbout() {
  *   说明是幂等而非失败，返回 true（不回滚）。
  *
  * @param {string} key 设置项键名
- * @param
+ * @param {any} nextValue 目标值
+ * @returns {boolean} true 表示成功（含幂等），false 表示需要回滚 UI
+ */
+function handleSettingsToggle(key, nextValue) {
+    if (key === 'enableInitialsSearch') {
+        const didSet = dispatch('setInitialsSearchEnabled', {
+            enabled: nextValue
+        });
+
+        if (didSet) {
+            return true;
+        }
+
+        // M3 修复：dispatch 返回 false 时，区分"幂等"与"命令被拒"
+        // 幂等场景：用户点击的开关值已是当前值，dispatch 返回 false
+        // 但真实值已等于目标值 → 视为成功，UI 不回滚
+        const latestVault = getVaultSnapshot();
+        if (latestVault && latestVault.settings
+            && latestVault.settings.enableInitialsSearch === nextValue) {
+            return true;
+        }
+        return false;
+    }
+
+    // 未知设置项：保守返回 false，让 UI 回滚
+    return false;
+}
+
+// ==================== 回收站操作 ====================
+
+/**
+ * 从回收站恢复单条
+ *
+ * 流程：
+ *   1. 查找条目
+ *   2. 若源标签仍存在 → 直接恢复到源标签
+ *   3. 若源标签已删除 → 弹出选择目标标签模态框
+ *   4. 执行恢复并给出提示
+ *
+ * 【返回值语义（对齐 recycle-bin-modal.js 问题 B 修复）】
+ *   返回 false = 用户主动取消（保留选中集）
+ *   返回 true  = 操作已执行
+ *
+ * @param {string} binId
+ * @returns {Promise<boolean>}
+ */
+async function handleRecycleRestoreSingle(binId) {
+    const vault = getVaultSnapshot();
+    if (!vault || !Array.isArray(vault.recycleBin)) return false;
+
+    const binItem = vault.recycleBin.find(function (item) {
+        return item.id === binId;
+    });
+    if (!binItem) {
+        showMessage('该条目已不存在', true);
+        return false;
+    }
+
+    // 检查源标签是否仍然存在
+    const sourceTag = binItem.sourceTagId
+        ? vault.tags.find(function (tag) {
+            return tag.id === binItem.sourceTagId;
+        })
+        : null;
+
+    // ---------- 情况 A：源标签仍然存在 → 直接恢复 ----------
+    if (sourceTag) {
+        const didRestore = dispatch('restoreStatementFromRecycleBin', {
+            binId: binId,
+            targetTagId: sourceTag.id
+        });
+
+        if (didRestore) {
+            showMessage('✅ 已恢复到「' + sourceTag.name + '」');
+            return true;
+        }
+        showMessage('恢复失败：目标标签中已存在相同语句', true);
+        return false;
+    }
+
+    // ---------- 情况 B：源标签已删除 → 让用户选择目标标签 ----------
+    if (vault.tags.length === 0) {
+        showMessage('没有可用标签，无法恢复', true);
+        return false;
+    }
+
+    const counts = {};
+    for (const tag of vault.tags) {
+        counts[tag.id] = (vault.statementsMap[tag.id] || []).length;
+    }
+
+    const result = await openSelectTagModal({
+        title: '源标签已删除，选择恢复的目标标签',
+        tags: vault.tags,
+        counts: counts,
+        excludeTagId: null
+    });
+    if (!result) {
+        // 用户取消：返回 false 让 modal 保留选中集
+        return false;
+    }
+
+    const targetTag = vault.tags.find(function (tag) {
+        return tag.id === result.tagId;
+    });
+    if (!targetTag) {
+        showMessage('目标标签不存在，请刷新页面后重试', true);
+        return false;
+    }
+
+    const didRestore = dispatch('restoreStatementFromRecycleBin', {
+        binId: binId,
+        targetTagId: targetTag.id
+    });
+
+    if (didRestore) {
+        showMessage('✅ 已恢复到「' + targetTag.name + '」');
+        return true;
+    }
+    showMessage('恢复失败：目标标签中已存在相同语句', true);
+    return false;
+}
+
+/**
+ * 从回收站批量恢复
+ *
+ * 流程：
+ *   1. 让用户选择统一的目标标签
+ *   2. 预计算将恢复 / 将跳过（冲突）的条数
+ *   3. 执行恢复并给出明细提示
+ *
+ * 【返回值语义】
+ *   返回 false = 用户取消目标选择，保留选中集
+ *   返回 true  = 操作已执行（含"全部冲突无需 dispatch"场景）
+ *
+ * @param {string[]} binIds
+ * @returns {Promise<boolean>}
+ */
+async function handleRecycleRestoreBatch(binIds) {
+    if (!Array.isArray(binIds) || binIds.length === 0) return false;
+
+    const vault = getVaultSnapshot();
+    if (!vault || !Array.isArray(vault.recycleBin)) return false;
+
+    if (vault.tags.length === 0) {
+        showMessage('没有可用标签，无法恢复', true);
+        return false;
+    }
+
+    // 选择目标标签
+    const counts = {};
+    for (const tag of vault.tags) {
+        counts[tag.id] = (vault.statementsMap[tag.id] || []).length;
+    }
+
+    const result = await openSelectTagModal({
+        title: '选择批量恢复的目标标签',
+        tags: vault.tags,
+        counts: counts,
+        excludeTagId: null
+    });
+    if (!result) {
+        // 用户取消：返回 false 让 modal 保留选中集
+        return false;
+    }
+
+    const targetTagId = result.tagId;
+    const targetTag = vault.tags.find(function (tag) {
+        return tag.id === targetTagId;
+    });
+    if (!targetTag) {
+        showMessage('目标标签不存在，请刷新页面后重试', true);
+        return false;
+    }
+
+    // ---------- 预计算：将恢复 / 将跳过（冲突） ----------
+    const idSet = new Set(binIds);
+    const existingTexts = new Set(
+        (vault.statementsMap[targetTagId] || []).map(function (item) {
+            return String(item.text).trim();
+        })
+    );
+
+    let willRestoreCount = 0;
+    let conflictSkippedCount = 0;
+
+    for (const binItem of vault.recycleBin) {
+        if (!idSet.has(binItem.id)) continue;
+
+        const normalizedText = String(binItem.text).trim();
+        if (existingTexts.has(normalizedText)) {
+            conflictSkippedCount++;
+            continue;
+        }
+        existingTexts.add(normalizedText);
+        willRestoreCount++;
+    }
+
+    // ---------- 全部冲突：无需 dispatch ----------
+    if (willRestoreCount === 0) {
+        showMessage(
+            '未恢复任何语句：选中的 ' + binIds.length
+            + ' 条与目标标签「' + targetTag.name + '」中已有语句重复',
+            true
+        );
+        return true;
+    }
+
+    const didRestore = dispatch('restoreStatementsFromRecycleBin', {
+        binIds: binIds,
+        targetTagId: targetTagId
+    });
+
+    if (!didRestore) {
+        showMessage('恢复失败', true);
+        return false;
+    }
+
+    let message = '✅ 已恢复 ' + willRestoreCount
+        + ' 条到「' + targetTag.name + '」';
+    if (conflictSkippedCount > 0) {
+        message += '；跳过 ' + conflictSkippedCount + ' 条（与目标标签已有语句重复）';
+    }
+    showMessage(message);
+    return true;
+}
+
+/**
+ * 从回收站彻底删除单条
+ *
+ * @param {string} binId
+ * @returns {Promise<boolean>}
+ */
+async function handleRecyclePurgeSingle(binId) {
+    const vault = getVaultSnapshot();
+    if (!vault || !Array.isArray(vault.recycleBin)) return false;
+
+    const binItem = vault.recycleBin.find(function (item) {
+        return item.id === binId;
+    });
+    if (!binItem) {
+        showMessage('该条目已不存在', true);
+        return false;
+    }
+
+    // 按 codePoint 安全截断预览文本（避免断开 surrogate pair）
+    const allCharacters = Array.from(binItem.text);
+    const previewText = allCharacters.length > 40
+        ? allCharacters.slice(0, 40).join('') + '...'
+        : binItem.text;
+
+    const confirmed = await showConfirmDialog(
+        '确定彻底删除此条目吗？\n\n' + previewText
+        + '\n\n此操作不可恢复。'
+    );
+    if (!confirmed) {
+        return false;
+    }
+
+    const didPurge = dispatch('purgeStatementFromRecycleBin', {
+        binId: binId
+    });
+
+    if (didPurge) {
+        showMessage('已彻底删除');
+        return true;
+    }
+    return false;
+}
+
+/**
+ * 从回收站批量彻底删除
+ *
+ * @param {string[]} binIds
+ * @returns {Promise<boolean>}
+ */
+async function handleRecyclePurgeBatch(binIds) {
+    if (!Array.isArray(binIds) || binIds.length === 0) return false;
+
+    const confirmed = await showConfirmDialog(
+        '确定彻底删除选中的 ' + binIds.length
+        + ' 条语句吗？\n\n此操作不可恢复。'
+    );
+    if (!confirmed) {
+        return false;
+    }
+
+    const didPurge = dispatch('purgeStatementsFromRecycleBin', {
+        binIds: binIds
+    });
+
+    if (didPurge) {
+        showMessage('已彻底删除 ' + binIds.length + ' 条');
+        return true;
+    }
+    return false;
+}
+
+/**
+ * 清空回收站
+ *
+ * @returns {Promise<boolean>}
+ */
+async function handleRecycleClearAll() {
+    const vault = getVaultSnapshot();
+    if (!vault || !Array.isArray(vault.recycleBin)) return false;
+    if (vault.recycleBin.length === 0) return false;
+
+    const confirmed = await showConfirmDialog(
+        '确定清空回收站吗？\n\n共 ' + vault.recycleBin.length
+        + ' 条语句将被永久删除，此操作不可恢复。'
+    );
+    if (!confirmed) {
+        return false;
+    }
+
+    const didClear = dispatch('clearRecycleBin', {});
+
+    if (didClear) {
+        showMessage('回收站已清空');
+        return true;
+    }
+    return false;
+}
+
+// ==================== 侧边栏滚动记忆 ====================
+
+/**
+ * 从 sessionStorage 恢复侧边栏滚动位置
+ *
+ * 与主列表滚动位置相同策略：会话级瞬态，不进入 Vault 持久化。
+ */
+function restoreSidebarScrollState() {
+    const sidebarTagsList = document.getElementById('sidebarTagsList');
+    if (!sidebarTagsList) return;
+
+    try {
+        const savedValue = sessionStorage.getItem(SESSION_KEY_SIDEBAR_SCROLL_POSITION);
+        if (savedValue !== null) {
+            const parsed = parseFloat(savedValue);
+            if (!Number.isNaN(parsed)) {
+                sidebarTagsList.scrollTop = parsed;
+            }
+        }
+    } catch (storageError) {
+        console.warn('[main] 侧边栏滚动位置读取失败:', storageError);
+    }
+}
+
+/**
+ * 绑定侧边栏滚动监听 + beforeunload 兜底保存
+ *
+ * 保存策略：
+ *   · 滚动中：150ms 防抖后写入 sessionStorage
+ *   · beforeunload：立即 flush 主列表防抖持久化 + 侧边栏滚动位置
+ *
+ * 【R1 修复】sessionStorage 读写全部包 try/catch，避免隐私模式
+ * 或配额耗尽导致主流程异常。
+ */
+function bindSidebarScrollMemory() {
+    const sidebarTagsList = document.getElementById('sidebarTagsList');
+    let sidebarScrollTimer = null;
+
+    if (sidebarTagsList) {
+        sidebarTagsList.addEventListener('scroll', function () {
+            if (sidebarScrollTimer) clearTimeout(sidebarScrollTimer);
+            sidebarScrollTimer = setTimeout(function () {
+                sidebarScrollTimer = null;
+                try {
+                    sessionStorage.setItem(
+                        SESSION_KEY_SIDEBAR_SCROLL_POSITION,
+                        String(sidebarTagsList.scrollTop)
+                    );
+                } catch (storageError) {
+                    console.warn('[main] 侧边栏滚动位置写入失败:', storageError);
+                }
+            }, SCROLL_SAVE_DEBOUNCE_MS);
+        }, { passive: true });
+    }
+
+    // beforeunload：flush 待持久化的数据，减少丢失概率
+    window.addEventListener('beforeunload', function () {
+        flushDebouncedPersist();
+        if (sidebarTagsList) {
+            try {
+                sessionStorage.setItem(
+                    SESSION_KEY_SIDEBAR_SCROLL_POSITION,
+                    String(sidebarTagsList.scrollTop)
+                );
+            } catch (storageError) {
+                // 卸载阶段的失败无关紧要，忽略
+            }
+        }
+    });
+}
+
+// ==================== 应用启动 ====================
+
+bootstrap().catch(function (bootstrapError) {
+    console.error('[main] 应用启动失败:', bootstrapError);
+    try {
+        showMessage('应用启动失败，请刷新页面重试', true);
+    } catch (toastError) {
+        // 静默：Toast 初始化本身失败时不再抛出
+    }
+});
