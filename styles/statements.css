@@ -1,0 +1,235 @@
+/* filename: styles/statements.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 语句卡片样式
+   包含：卡片容器、复选框、序号、正文、标签标签、操作按钮容器、
+         两行截断样式、悬停全文浮层
+   操作按钮本体（.icon-btn）在 icons.css 中定义
+   ========================================================================
+ *
+ * 【P2-N5 修复（历史）】
+ *   清理 .card-checkbox 的死代码。
+ *
+ *   背景：
+ *     原 CSS 中 .card-checkbox 定义 display: none，
+ *     .card-checkbox.visible 定义 display: flex。
+ *     但 JS 层（statement-card.js）始终带 visible 类，导致：
+ *       1. .card-checkbox 的 display: none 是死规则
+ *       2. "visible" 这个类名暗示存在"非 visible 状态"，实际不存在
+ *
+ *   修复：
+ *     - 合并 .card-checkbox 与 .card-checkbox.visible 两条规则为一条
+ *     - 保留所有视觉效果（display: flex + align-items: center 等）
+ *     - JS 层同步去掉 visible 类
+ * ======================================================================== */
+
+
+.statement-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 0.9rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    border: 1px solid var(--color-border-subtle);
+    box-shadow: var(--shadow-sm);
+    cursor: grab;
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+    position: relative;
+}
+
+.statement-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.statement-card:active {
+    cursor: grabbing;
+}
+
+/* ---------- 复选框 ----------
+ * 始终可见：JS 层不再切换 visible 类，
+ * 复选框由 .statement-card 的 flex 布局统一管理。
+ */
+.card-checkbox {
+    display: flex;
+    align-items: center;
+    margin-right: var(--space-1);
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ---------- 序号 ---------- */
+.card-index {
+    font-weight: var(--font-weight-semibold);
+    min-width: 40px;
+    text-align: center;
+    background: var(--color-primary-tint-deep);
+    padding: 4px 0;
+    border-radius: var(--radius-pill);
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+}
+
+/* ---------- 正文 ----------
+ *
+ * 两行截断策略：
+ *   - 使用 -webkit-line-clamp 将内容限制为 2 行
+ *   - 恒定高度，不改变卡片总高度，避免影响列表中其他卡片定位
+ *   - 内容溢出时不会自动展开，由 statement-list.js 检测 scrollHeight
+ *     与 clientHeight 的差值，仅在真正溢出时才在悬停后显示全文浮层
+ *   - 移动端（≤700px）放宽为 3 行，因触屏无 hover 交互，用户更需要
+ *     直接看到更多内容，同时又避免完全展开破坏列表节奏
+ */
+.card-content {
+    flex: 1;
+    font-size: var(--font-size-lg);
+    line-height: 1.45;
+    font-weight: var(--font-weight-medium);
+    word-break: break-word;
+    min-width: 0;
+    color: var(--color-text-primary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ---------- 全局模式下的标签标识 ---------- */
+.card-tag-label {
+    background: var(--color-primary-soft);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: var(--font-size-xs);
+    color: var(--color-primary-dark);
+    margin-right: var(--space-2);
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* ---------- 操作按钮容器 ---------- */
+.card-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    align-items: center;
+}
+
+/* ---------- 全文浮层 ----------
+ *
+ * 由 views/statement-list.js 动态创建并注入 body（单例复用）
+ *
+ * 【尺寸与定位（本次重构）】
+ *   定位基准：.card-index（序号）左边缘
+ *   宽度基准：从 .card-index 左边缘 → .card-actions 左边缘 的距离
+ *   宽度取值：直接等于上述距离
+ *
+ *   为什么用这个基准：
+ *     用户视图上"文字可以占据的区域"就是从序号之后到功能按钮之前。
+ *     直接采用该区间作为浮层宽度，视觉上与"文字区一样宽"完全一致，
+ *     且永不遮挡右侧功能按钮。
+ *
+ *   高度约束：max-height: min(40vh, 360px)
+ *     避免在 1080p 屏幕上浮层占据过多纵向空间。
+ *
+ *   小箭头：始终指向 .card-content 左边缘（文本起始位置）。
+ *     箭头位置由 CSS 变量 --popover-arrow-left 控制，
+ *     由 statement-list.js 的 positionPopover 函数动态计算。
+ *     当浮层显示在卡片上方时，通过 [data-placement="above"] 翻转箭头方向。
+ *
+ * 【视觉设计依据】
+ *   参考 VS Code / Chrome DevTools / GitHub Tooltip 的做法：
+ *     - 对比度主要靠"阴影深度"，不是"背景色差"
+ *     - 边框是"次要点缀"，不承担主要对比度职责
+ *     - 小箭头是"视觉锚点"，明确浮层归属
+ *     - 颜色与整体设计语言保持一致（主色 + 深蓝阴影）
+ *
+ * 【可交互性】
+ *   pointer-events: auto，鼠标可进入并选中/复制文本
+ *
+ * 【z-index 说明】
+ *   900：位于 sidebar（20）之上、modal（1000）之下
+ *   既不遮挡侧边栏，也不会覆盖模态框
+ *   与 shortcuts.js 中 Esc 优先级"模态框 → 浮层"一致
+ */
+.statement-fulltext-popover {
+    position: fixed;
+    display: none;
+    top: 0;
+    left: 0;
+    /* 宽度由 JS 动态设置为"从 .card-index 左边缘 → .card-actions 左边缘"的距离 */
+    /* 高度上限：同时受 vh 与 px 双重约束 */
+    max-height: min(40vh, 360px);
+    padding: var(--space-6) var(--space-6);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    border: 1px solid rgba(25, 118, 210, 0.14);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-popover);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-lg);
+    line-height: 1.6;
+    font-weight: var(--font-weight-medium);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: auto;
+    z-index: 900;
+    pointer-events: auto;
+    box-sizing: border-box;
+    transition: box-shadow var(--transition-base);
+}
+
+/* ---------- 小箭头（默认朝下，指向下方卡片） ---------- */
+.statement-fulltext-popover::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #ffffff;
+    border-top: 1px solid rgba(25, 118, 210, 0.14);
+    border-left: 1px solid rgba(25, 118, 210, 0.14);
+    transform: rotate(45deg);
+    top: -7px;
+    left: var(--popover-arrow-left, 20px);
+    pointer-events: none;
+    border-top-right-radius: 2px;
+}
+
+/* ---------- 小箭头翻转：浮层在卡片上方时 ---------- */
+.statement-fulltext-popover[data-placement="above"]::before {
+    top: auto;
+    bottom: -7px;
+    transform: rotate(225deg);
+}
+
+/* ---------- 小屏适配 ---------- */
+@media (max-width: 700px) {
+    .statement-card {
+        padding: 0.8rem 1rem;
+        gap: var(--space-3);
+        border-radius: var(--radius-md);
+    }
+
+    .card-actions .icon-btn {
+        width: var(--icon-button-size-mobile);
+        height: var(--icon-button-size-mobile);
+    }
+
+    .card-index {
+        min-width: 32px;
+        font-size: var(--font-size-sm);
+    }
+
+    /* 移动端放宽为 3 行：触屏无悬停，用户更需要直接看到更多内容 */
+    .card-content {
+        font-size: var(--font-size-base);
+        -webkit-line-clamp: 3;
+    }
+
+    /* 移动端不显示浮层（无 hover 语义，避免与触屏交互冲突） */
+    .statement-fulltext-popover {
+        display: none !important;
+    }
+}

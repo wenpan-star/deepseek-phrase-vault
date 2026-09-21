@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!-- filename: index.html -->
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#e7eef4">
+    <!-- ================================================================
+         Content-Security-Policy
+         说明：
+           - default-src 'self'：默认同源
+           - script-src：允许 Sortable 与 Font Awesome 各 CDN
+           - style-src：允许 Google Fonts 与 FA 各 CDN，'unsafe-inline'
+             用于标签色点内联 style（颜色已白名单化）
+           - font-src：允许 Google Fonts 字体
+           - img-src：允许 data:（favicon 内嵌 SVG）
+           - connect-src 'self'：禁止一切外部数据外连
+         ================================================================ -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self'
+                       https://cdn.jsdelivr.net
+                       https://cdn.bootcdn.net
+                       https://lib.baomitu.com
+                       https://cdn.staticfile.org
+                       https://cdnjs.cloudflare.com;
+                   style-src 'self' 'unsafe-inline'
+                       https://fonts.googleapis.com
+                       https://cdn.bootcdn.net
+                       https://lib.baomitu.com
+                       https://cdn.staticfile.org
+                       https://cdnjs.cloudflare.com;
+                   font-src 'self' data:
+                       https://fonts.gstatic.com
+                       https://cdn.bootcdn.net
+                       https://lib.baomitu.com
+                       https://cdn.staticfile.org
+                       https://cdnjs.cloudflare.com;
+                   img-src 'self' data:;
+                   connect-src 'self';">
+    <title>DeepSeek 语句工坊 | 搜索 · 持久标签 · 批量 · 全局</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='80'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles/tokens.css">
+    <link rel="stylesheet" href="./styles/base.css">
+    <link rel="stylesheet" href="./styles/layout.css">
+    <link rel="stylesheet" href="./styles/sidebar.css">
+    <link rel="stylesheet" href="./styles/header.css">
+    <link rel="stylesheet" href="./styles/search.css">
+    <link rel="stylesheet" href="./styles/statements.css">
+    <link rel="stylesheet" href="./styles/batch.css">
+    <link rel="stylesheet" href="./styles/modals.css">
+    <link rel="stylesheet" href="./styles/toast.css">
+    <link rel="stylesheet" href="./styles/icons.css">
+    <!-- Sortable.js 锁定版本（避免 @latest 未来不兼容更新） -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+</head>
+<body>
+<div class="app-layout" id="appLayout">
+    <aside class="sidebar" id="sidebar" aria-label="语料标签侧边栏">
+        <div class="sidebar-header" id="sidebarHeader" role="button" tabindex="0" aria-label="切换侧边栏展开状态">
+            <div class="sidebar-logo"><i class="fas fa-tags" aria-hidden="true"></i></div>
+            <div class="sidebar-title">语料标签</div>
+        </div>
+        <div class="tags-scroll" id="sidebarTagsList" role="list"></div>
+        <div class="add-tag-btn" id="sidebarAddTagBtn" role="button" tabindex="0" aria-label="新建标签">
+            <i class="fas fa-plus-circle" aria-hidden="true"></i><span>新建标签</span>
+        </div>
+    </aside>
+    <main class="main-content">
+        <header class="app-header" id="appHeader">
+            <div class="logo-area">
+                <div class="logo-icon"><i class="fas fa-shield-alt" aria-hidden="true"></i></div>
+                <div class="title"><h1>DeepSeek 语句工坊</h1></div>
+            </div>
+            <div class="search-wrapper" id="searchWrapper">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="text" id="searchInput" placeholder="搜索语句..." autocomplete="off" spellcheck="false" aria-label="搜索语句">
+                <button class="search-scope-btn" id="searchScopeBtn" type="button" title="切换搜索范围：当前标签 / 全局" aria-label="切换搜索范围">
+                    <i class="fas fa-tag" aria-hidden="true"></i>
+                </button>
+                <button class="regex-toggle-btn" id="regexToggleBtn" type="button" title="启用正则表达式搜索" aria-label="切换正则模式">
+                    <i class="fas fa-asterisk" aria-hidden="true"></i>
+                </button>
+                <button class="clear-search" id="clearSearchBtn" type="button" style="display: none;" title="清除搜索" aria-label="清除搜索">
+                    <i class="fas fa-times-circle" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="header-actions" id="headerActions">
+                <div class="stat-badge" id="statCounter">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i> <span>0</span> 条
+                </div>
+                <button class="btn btn-outline" id="exportBtn" type="button">
+                    <i class="fas fa-download" aria-hidden="true"></i> 导出全局
+                </button>
+                <label class="btn btn-outline" for="importFileInput" role="button" tabindex="0">
+                    <i class="fas fa-upload" aria-hidden="true"></i> 导入全局/旧档
+                </label>
+                <input type="file" id="importFileInput" accept=".json" style="display: none;">
+                <button class="btn btn-outline" id="resetDefaultBtn" type="button">
+                    <i class="fas fa-lightbulb" aria-hidden="true"></i> 重置全局
+                </button>
+            </div>
+        </header>
+        <div class="main-list" id="mainListContainer">
+            <div id="batchActionBar" class="batch-bar" style="display: none;">
+                <button class="btn btn-outline" id="batchSelectAllBtn" type="button">全选</button>
+                <button class="btn btn-outline" id="batchDeleteBtn" type="button">
+                    <i class="fas fa-trash-alt" aria-hidden="true"></i> 批量删除
+                </button>
+                <button class="btn btn-outline" id="batchMoveBtn" type="button">
+                    <i class="fas fa-arrow-right" aria-hidden="true"></i> 移动到标签
+                </button>
+                <span id="batchCount" class="batch-count"></span>
+            </div>
+            <div id="statementsList" class="statements-grid"></div>
+        </div>
+        <div class="add-section">
+            <div class="add-wrapper">
+                <input type="text" id="newStatementInput" placeholder="✍️ 写下新的语句或提示词..." autocomplete="off" aria-label="新建语句">
+                <button id="addStatementBtn" type="button" aria-label="添加语句">
+                    <i class="fas fa-plus-circle" aria-hidden="true"></i> 添加
+                </button>
+            </div>
+        </div>
+        <div class="version-footer">版本 V7.0.0  |  命令-查询分离架构  |  AES-256-GCM 加密  |  零构建 · 原生 ESM</div>
+    </main>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

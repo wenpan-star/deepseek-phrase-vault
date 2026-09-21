@@ -1,0 +1,125 @@
+/* filename: styles/batch.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 批量操作栏样式
+   ========================================================================
+ *
+ * 【本次修复】
+ *   本文件之前的实际内容被 PowerShell 命令污染（含 Test-Path / Get-ChildItem
+ *   等），导致浏览器把整段文本当作无效 CSS 规则处理、批量操作栏无样式。
+ *
+ *   本次依据 index.html 中 #batchActionBar 的实际 DOM 结构 +
+ *   views/batch-bar.js 的显示/隐藏逻辑 + tokens.css 的设计令牌，
+ *   重新实现批量操作栏的全部样式。行为与既有 JS 完全兼容：
+ *     · 默认 display: none，由 batch-bar.js 动态切换为 flex
+ *     · 三个 .btn 按钮（全选 / 批量删除 / 移动到标签）水平排列
+ *     · #batchCount 计数徽章自动推到行尾
+ *     · 小屏自动换行，计数徽章独占一行、居中对齐
+ *
+ * 【保留】
+ *   · .btn / .btn-outline 原语定义在 layout.css 中，本文件不复写
+ *   · .icon-btn 定义在 icons.css 中，本文件不复写
+ *   · 所有颜色、间距、圆角、动画全部引用 tokens.css 变量
+ * ======================================================================== */
+
+
+/* ============================================================================
+ * 一、容器
+ * ============================================================================ */
+
+/* 默认隐藏：由 batch-bar.js 的 updateBatchBar 依据 selectedCount 切换
+   display 属性。JS 显式设置 style.display = 'flex'，因此本处 display: none
+   只在初始状态和 selectedCount === 0 时生效。 */
+.batch-bar {
+    display: none;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    background: var(--color-surface-soft);
+    backdrop-filter: var(--backdrop-blur-md);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    /* 出现时轻微下滑，避免突然弹出 */
+    animation: batchBarFadeIn var(--transition-base) ease-out;
+}
+
+/* 淡入动画：从 -4px 轻轻落下，视觉上比直接出现更柔和 */
+@keyframes batchBarFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+/* ============================================================================
+ * 二、内部按钮
+ * ============================================================================ */
+
+/* 批量栏内的 .btn 尺寸比顶栏更紧凑，避免视觉重量超过实际重要性。
+   .btn 原语（背景、边框、hover、active）由 layout.css 统一提供。 */
+.batch-bar .btn {
+    font-size: var(--font-size-sm);
+    padding: 5px 14px;
+}
+
+/* 批量删除按钮：hover 时给出危险色暗示（对齐 icons.css 中 delete-btn 的语义色使用） */
+.batch-bar #batchDeleteBtn:hover {
+    background: var(--color-danger-lighter);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+
+
+/* ============================================================================
+ * 三、计数徽章
+ * ============================================================================ */
+
+/* 通过 margin-left: auto 推至行尾。字体使用 semibold 以在视觉上"报数"，
+   背景用主色的浅色版本，与顶栏 stat-badge 的视觉语言保持一致。 */
+.batch-count {
+    margin-left: auto;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-primary);
+    background: var(--color-primary-soft);
+    padding: 4px 12px;
+    border-radius: var(--radius-pill-sm);
+    white-space: nowrap;
+    flex-shrink: 0;
+    line-height: 1.4;
+}
+
+
+/* ============================================================================
+ * 四、响应式
+ * ============================================================================ */
+
+/* 小屏：内部边距收紧、按钮字号降低、计数徽章换行居中。
+   与 layout.css 中 .main-list 的移动端 padding 收紧策略一致。 */
+@media (max-width: 700px) {
+    .batch-bar {
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--space-3);
+    }
+
+    .batch-bar .btn {
+        font-size: var(--font-size-xs);
+        padding: 4px 10px;
+    }
+
+    /* 移动端：计数徽章换行后独占一行，居中对齐 */
+    .batch-count {
+        margin-left: 0;
+        width: 100%;
+        text-align: center;
+    }
+}

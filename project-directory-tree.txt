@@ -1,0 +1,70 @@
+# filename: project-directory-tree.txt
+
+deepseek-statement-workshop/                ← 仓库名
+├── .github/
+│   └── workflows/
+│       └── pages.yml
+├── .gitignore                              ← 屏蔽 .zip / node_modules / *.bak 等
+├── .nojekyll
+├── build.bat                               ← 根目录一键脚本（纯 ASCII，多镜像兜底）
+├── src/
+│   ├── main.js
+│   ├── constants.js
+│   ├── preset.js
+│   ├── shortcuts.js
+│   ├── core/
+│   │   ├── vault.js
+│   │   ├── facade.js
+│   │   ├── crypto.js
+│   │   ├── persist.js
+│   │   └── fa-loader.js
+│   ├── commands/
+│   │   ├── index.js
+│   │   ├── statement-crud.js
+│   │   ├── statement-organize.js
+│   │   ├── tag-crud.js
+│   │   ├── ui-state.js
+│   │   └── search.js                       ← 集成首字母搜索
+│   ├── utils/
+│   │   ├── dom.js
+│   │   ├── id.js
+│   │   ├── pinyin.js                       ← 手写逻辑，无数据
+│   │   ├── pinyin-data.js                  ← 自动生成（ES Module 数据）
+│   │   └── pinyin-data.js.bak              ← 首次运行 build.bat 后自动生成（git 忽略）
+│   └── views/
+│       ├── sidebar.js
+│       ├── header.js
+│       ├── search-bar.js
+│       ├── statement-list.js
+│       ├── statement-card.js
+│       ├── batch-bar.js
+│       ├── add-bar.js
+│       ├── toast.js
+│       └── modals/
+│           ├── confirm.js
+│           ├── edit.js
+│           ├── tag.js
+│           └── select-tag.js
+├── scripts/
+│   ├── data/
+│   │   └── 通用规范汉字表.xlsx              ← 唯一数据源（用户维护）
+│   └── tools/
+│       ├── README.md                       ← 工具说明
+│       ├── generate-pinyin-data.js         ← xlsx → src/utils/pinyin-data.js
+│       └── check-dict-gaps.js              ← 校验 pinyin-data.js 对 xlsx 的覆盖率
+├── styles/
+│   ├── tokens.css
+│   ├── base.css
+│   ├── layout.css
+│   ├── sidebar.css
+│   ├── header.css
+│   ├── search.css
+│   ├── statements.css
+│   ├── batch.css
+│   ├── modals.css
+│   ├── toast.css
+│   └── icons.css
+├── index.html
+├── README.md
+├── LICENSE
+└── project-directory-tree.txt

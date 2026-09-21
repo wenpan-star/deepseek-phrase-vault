@@ -1,0 +1,188 @@
+/* filename: styles/tokens.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 设计令牌
+   所有颜色、间距、圆角、字号、动画时长的唯一来源
+   任何组件样式都必须引用变量，不得内联硬编码
+   ======================================================================== */
+
+:root {
+    /* ---------- 背景与表面 ---------- */
+    --color-bg-gradient-start: #e7eef4;
+    --color-bg-gradient-end: #dce3ea;
+    --color-surface: #ffffff;
+    --color-surface-translucent: rgba(255, 255, 255, 0.92);
+    --color-surface-soft: rgba(255, 255, 255, 0.85);
+    --color-surface-minimal: rgba(255, 255, 255, 0.35);
+    --color-surface-faint: rgba(250, 252, 254, 0.3);
+
+    /* ---------- 文本 ---------- */
+    --color-text-primary: #1a2c3e;
+    --color-text-secondary: #2c4c6c;
+    --color-text-muted: #5b7e9e;
+    --color-text-subtle: #8ba0ae;
+    --color-text-placeholder: #b8c7d4;
+    --color-text-on-primary: #ffffff;
+
+    /* ---------- 主题色 ---------- */
+    --color-primary: #1976d2;
+    --color-primary-dark: #1565c0;
+    --color-primary-deep: #0e5b8c;
+    --color-primary-deepest: #0e3a50;
+    --color-primary-gradient-start: #0a5b8c;
+    --color-primary-gradient-end: #1e88e5;
+    --color-primary-soft: #e3f2fd;
+    --color-primary-tint: #eef2fa;
+    --color-primary-tint-hover: #e0e9f5;
+    --color-primary-tint-deep: #f0f4f9;
+    --color-primary-tint-hover-soft: #e3eef7;
+    --color-primary-tint-light: #edf4fa;
+
+    /* ---------- 语义色 ---------- */
+    --color-danger: #d32f2f;
+    --color-danger-soft: #ffcdd2;
+    --color-danger-lighter: #fde8e8;
+    --color-success: #2e7d32;
+    --color-success-soft: #e8f5e9;
+    --color-warning: #f57c00;
+    --color-highlight: #fff3c9;
+
+    /* ---------- 边框 ---------- */
+    --color-border-subtle: rgba(0, 0, 0, 0.04);
+    --color-border-default: rgba(0, 0, 0, 0.06);
+    --color-border-strong: rgba(0, 0, 0, 0.08);
+    --color-border-input: #dce5ec;
+    --color-border-tag-active: rgba(25, 118, 210, 0.2);
+    --color-border-tag-hover: rgba(25, 118, 210, 0.06);
+
+    /* ---------- 阴影 ---------- */
+    --shadow-xs: 0 2px 10px rgba(0, 0, 0, 0.03);
+    --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.2);
+    --shadow-logo-lg: 0 6px 16px rgba(30, 136, 229, 0.3);
+    --shadow-logo-sm: 0 4px 10px rgba(30, 136, 229, 0.25);
+    --shadow-icon-hover: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+    /* ---------- 全文浮层专用阴影 ----------
+     * 双层结构：
+     *   第一层（近处）：2px 偏移、6px 模糊，营造"贴地感"
+     *   第二层（远处）：12px 偏移、32px 模糊，营造"浮起感"
+     *
+     * 阴影色采用深蓝 (14, 58, 80)，与项目主题色 #1976d2 的深色版一致，
+     * 视觉上"沉"而不"脏"，比纯黑阴影更融合。
+     */
+    --shadow-popover:
+        0 2px 6px rgba(14, 58, 80, 0.08),
+        0 12px 32px rgba(14, 58, 80, 0.14);
+
+    /* ---------- 圆角 ---------- */
+    --radius-xs: 6px;
+    --radius-sm: 14px;
+    --radius-md: 18px;
+    --radius-lg: 24px;
+    --radius-xl: 36px;
+    --radius-2xl: 48px;
+    --radius-pill: 40px;
+    --radius-pill-sm: 30px;
+    --radius-full: 100px;
+
+    /* ---------- 间距 ---------- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 10px;
+    --space-4: 12px;
+    --space-5: 16px;
+    --space-6: 20px;
+    --space-7: 24px;
+    --space-8: 28px;
+
+    /* ---------- 字体 ---------- */
+    --font-family-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
+    --font-size-xs: 0.7rem;
+    --font-size-sm: 0.8rem;
+    --font-size-base: 0.85rem;
+    --font-size-md: 0.9rem;
+    --font-size-lg: 0.95rem;
+    --font-size-xl: 1rem;
+    --font-size-2xl: 1.5rem;
+    --font-weight-light: 300;
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* ---------- 布局尺寸 ---------- */
+    --sidebar-width-collapsed: 68px;
+    --sidebar-width-collapsed-mobile: 56px;
+    --sidebar-width-expanded: 320px;
+    --app-layout-max-width: 1800px;
+    --search-wrapper-min-width: 180px;
+    --search-wrapper-max-width: 360px;
+    --icon-button-size: 36px;
+    --icon-button-size-mobile: 40px;
+
+    /* ---------- 模态框尺寸（参考悬浮浮层的约束思路）----------
+     * 每个模态框的宽度都有"px 上限 + vw 视口约束"双重限制，
+     * 高度都有"vh 上限 + px 上限"双重限制，与悬浮浮层
+     * 的 "min(40vh, 360px)" 思路一致。
+     *
+     * 编辑语句：沉浸式编辑，宽度最宽（600px），高度最高（560px）
+     * 标签模态框：内容简单，中等宽度
+     * 选择标签：列表动态，与标签模态框同宽
+     * 确认对话框：短消息，最紧凑
+     */
+    --modal-card-width-edit: min(600px, 92vw);
+    --modal-card-width-tag: min(480px, 92vw);
+    --modal-card-width-select-tag: min(480px, 92vw);
+    --modal-card-width-confirm: min(440px, 92vw);
+
+    --modal-card-max-height-edit: min(70vh, 560px);
+    --modal-card-max-height-tag: min(60vh, 440px);
+    --modal-card-max-height-select-tag: min(60vh, 480px);
+    /* 确认对话框内容短，无 max-height 约束 */
+
+    /* textarea 的高度约束 */
+    --modal-textarea-min-height: 160px;
+    --modal-textarea-max-height: min(50vh, 400px);
+
+    /* 模态框圆角：24px，与 560px 高度的比例约 4.3%，处于沉稳区 */
+    --modal-card-radius: 24px;
+
+    /* ---------- 编辑模态框 · 动态尺寸（本次重构）----------
+     * 这两个变量在运行时由 src/views/modals/edit.js 的
+     * computeAndApplyEditModalSize() 函数根据主列表布局动态覆盖。
+     *
+     * 计算规则：
+     *   宽度 = （序号左边缘 → 按钮区左边缘 的距离）× 2/3
+     *   高度 = 视口高度 × 1/2
+     *
+     * 默认值作为 JS 未执行或空状态时的兜底，与 --modal-card-width-edit
+     * 和 --modal-card-max-height-edit 的取值保持一致，保证降级时不突变。
+     */
+    --modal-card-width-edit-dynamic: min(600px, 92vw);
+    --modal-card-height-edit-dynamic: min(70vh, 560px);
+
+    /* ---------- 动画 ---------- */
+    --transition-instant: 0.1s;
+    --transition-fast: 0.15s;
+    --transition-base: 0.2s;
+    --transition-tag: 0.18s;
+    --transition-sidebar: 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+
+    /* ---------- 模糊 ---------- */
+    --backdrop-blur-xs: blur(2px);
+    --backdrop-blur-sm: blur(4px);
+    --backdrop-blur-md: blur(12px);
+    --backdrop-blur-lg: blur(18px);
+    --backdrop-blur-modal: blur(6px);
+
+    /* ---------- Z 轴层级 ---------- */
+    --z-sidebar: 20;
+    --z-modal: 1000;
+    --z-toast: 1100;
+
+    /* ---------- 滚动条 ---------- */
+    --scrollbar-width: 8px;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.1);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+}

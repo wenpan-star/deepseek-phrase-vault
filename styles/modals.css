@@ -1,0 +1,362 @@
+/* filename: styles/modals.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 模态框样式
+   包含：通用模态框外壳、卡片、颜色选择器、标签选择列表、确认对话框
+   所有模态框 HTML 由 views/modals/*.js 动态注入，本文件只定义样式
+   ======================================================================== */
+
+/* ---------- 通用外壳 ---------- */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: var(--backdrop-blur-modal);
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-modal);
+    padding: var(--space-5);
+}
+
+.modal[style*="display: flex"],
+.modal.is-open {
+    display: flex;
+}
+
+/* ========================================================================
+   通用卡片
+   ========================================================================
+ *
+ * 【布局模型】
+ *   所有 modal-card 统一使用 flex column 布局，使内容区
+ *   （如 textarea、标签列表）可以在高度不足时内部滚动，
+ *   而标题行与按钮行永远可见。
+ *
+ *   这对于"沉浸式编辑"至关重要：
+ *     用户编辑超长文本时不会丢失"保存按钮"，
+ *     也不需要滚到顶部才能看到"编辑语句"标题。
+ *
+ * 【尺寸模型】
+ *   宽度：各模态框独立设置
+ *   高度：各模态框独立设置
+ *   编辑语句：尺寸由 JS 动态计算并写入 CSS 变量（本次重构）
+ *   其余模态框：仍使用静态的 min(Npx, 92vw) 模式
+ *
+ * 【圆角】
+ *   24px（--modal-card-radius），与 560px 高度比例约 4.3%，
+ *   处于"沉稳区"（5-8%），避免 36px 的"胶囊感"
+ */
+.modal-card {
+    background: var(--color-surface);
+    max-width: var(--modal-card-width-tag);
+    border-radius: var(--modal-card-radius);
+    padding: 1.75rem;
+    box-shadow: var(--shadow-lg);
+    animation: modalFadeIn var(--transition-base) ease-out;
+
+    /* flex column：让内容区可以独立滚动 */
+    display: flex;
+    flex-direction: column;
+    max-height: var(--modal-card-max-height-tag);
+    overflow: hidden;
+
+    /* 保证小屏下不溢出视口 */
+    box-sizing: border-box;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ---------- 分类尺寸：按模态框 ID 精准设置 ---------- */
+
+/* 编辑语句模态框
+ *
+ * 【本次重构】尺寸改为动态计算：
+ *   width  = var(--modal-card-width-edit-dynamic)
+ *          = （序号左边缘 → 按钮区左边缘 的距离）× 2/3
+ *   height = var(--modal-card-height-edit-dynamic)
+ *          = 视口高度 × 1/2
+ *
+ * 具体计算逻辑见 src/views/modals/edit.js 的
+ * computeAndApplyEditModalSize() 函数。
+ *
+ * 覆盖基类的 max-width / max-height 为 none：
+ *   基类 .modal-card 定义了 max-width 和 max-height，
+ *   这里需要显式清除，让动态计算的 width / height 生效。
+ */
+#editModal .modal-card {
+    width: var(--modal-card-width-edit-dynamic);
+    height: var(--modal-card-height-edit-dynamic);
+    max-width: none;
+    max-height: none;
+}
+
+/* 标签模态框（新建 / 编辑标签） */
+#tagModal .modal-card {
+    max-width: var(--modal-card-width-tag);
+    max-height: var(--modal-card-max-height-tag);
+}
+
+/* 选择目标标签模态框 */
+#selectTagModal .modal-card {
+    max-width: var(--modal-card-width-select-tag);
+    max-height: var(--modal-card-max-height-select-tag);
+}
+
+/* 确认对话框 */
+#confirmDialog .modal-card {
+    max-width: var(--modal-card-width-confirm);
+    /* 内容短，不设 max-height，让内容自然撑开 */
+    max-height: none;
+}
+
+/* ---------- 标题行（固定高度） ---------- */
+.modal-card h3 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    margin: 0 0 var(--space-4) 0;
+}
+
+.modal-card h3 i {
+    color: var(--color-primary);
+}
+
+/* ---------- 内容区（弹性高度，可滚动）----------
+ * 说明：
+ *   编辑模态框的 textarea 直接作为 .modal-card 的子元素时，
+ *   会因 flex column 布局自动获得 flex-shrink: 1 的特性，
+ *   从而在高度不足时收缩并触发内部滚动。
+ */
+.modal-card textarea {
+    width: 100%;
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    border: 1px solid #ccc;
+    font-size: var(--font-size-md);
+    background: var(--color-surface);
+    transition: border-color var(--transition-fast);
+    box-sizing: border-box;
+
+    /* flex 布局：占据剩余空间，允许收缩 */
+    flex: 1;
+    min-height: 0;
+
+    /* 高度约束 */
+    min-height: var(--modal-textarea-min-height);
+    max-height: var(--modal-textarea-max-height);
+
+    /* 内部滚动 */
+    overflow-y: auto;
+    resize: vertical;
+    line-height: 1.55;
+    font-family: inherit;
+}
+
+.modal-card textarea:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.08);
+    outline: none;
+}
+
+.modal-card input[type="text"] {
+    width: 100%;
+    margin: 0 0 var(--space-4) 0;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-pill);
+    border: 1px solid #ccc;
+    font-size: var(--font-size-md);
+    background: var(--color-surface);
+    transition: border-color var(--transition-fast);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.modal-card input[type="text"]:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.08);
+    outline: none;
+}
+
+/* ========================================================================
+   输入校验失败反馈
+   ========================================================================
+ *
+ * 由 views/modals/edit.js 与 views/modals/tag.js 中的
+ * triggerInputErrorFeedback 函数动态添加 .input-error 类触发。
+ *
+ * 使用场景：
+ *   用户在编辑语句/标签时点击"保存/确定"，但输入为空。
+ *   之前的实现是静默 focus 无任何可见反馈，用户会误以为按钮坏了。
+ *
+ * 效果：
+ *   - 红色边框 + 淡红色外阴影：让用户立即注意到哪一处输入需要修正
+ *   - 左右抖动动画（0.4s）：模拟"错误提示"的物理隐喻
+ *   - 时长与 constants.js 中 INPUT_ERROR_SHAKE_DURATION_MS 保持一致
+ *
+ * 抖动幅度仅 4px，不干扰视觉但不至于被忽略。
+ */
+@keyframes modalInputShake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-4px);
+    }
+    75% {
+        transform: translateX(4px);
+    }
+}
+
+.modal-card input.input-error,
+.modal-card textarea.input-error {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.1);
+    animation: modalInputShake 0.4s ease-out;
+}
+
+/* ---------- 操作按钮行（固定高度，始终可见） ---------- */
+.modal-actions {
+    display: flex;
+    gap: var(--space-4);
+    justify-content: flex-end;
+    margin-top: var(--space-5);
+    flex-shrink: 0;
+}
+
+/* ---------- 颜色选择器 ---------- */
+.color-label {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    margin-top: var(--space-3);
+    flex-shrink: 0;
+}
+
+.color-picker-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin: var(--space-4) 0;
+    flex-shrink: 0;
+}
+
+.color-circle {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.color-circle:hover {
+    transform: scale(1.1);
+}
+
+.color-circle.selected {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.3);
+}
+
+/* ---------- 标签选择列表（复制/移动）----------
+ * 使用 flex: 1 + overflow-y: auto 让列表在高度不足时内部滚动，
+ * 标题行与底部按钮行始终可见。
+ */
+.tag-select-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: var(--space-5) 0 0 0;
+    padding-right: var(--space-1);
+}
+
+.tag-option {
+    padding: var(--space-4) var(--space-5);
+    background: #f8fafc;
+    border-radius: 60px;
+    margin: var(--space-2) 0;
+    cursor: pointer;
+    transition: all var(--transition-instant);
+    font-weight: var(--font-weight-medium);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--font-size-md);
+    flex-shrink: 0;
+}
+
+.tag-option:hover {
+    background: var(--color-primary-soft);
+}
+
+/* ---------- 确认对话框变体 ---------- */
+.confirm-dialog .modal-card {
+    text-align: center;
+}
+
+.confirm-dialog .confirm-icon {
+    font-size: 2.5rem;
+    color: var(--color-warning);
+    margin-bottom: var(--space-5);
+    flex-shrink: 0;
+}
+
+.confirm-dialog .confirm-icon i {
+    display: inline-block;
+}
+
+.confirm-dialog .confirm-message {
+    font-size: var(--font-size-xl);
+    margin-bottom: 1.5rem;
+    word-break: break-word;
+    white-space: pre-wrap;
+    line-height: 1.55;
+    color: var(--color-text-primary);
+    text-align: left;
+    flex-shrink: 0;
+    /* 长消息时内部滚动（虽然确认框很少遇到） */
+    overflow-y: auto;
+    max-height: min(50vh, 320px);
+}
+
+.confirm-dialog .confirm-actions {
+    display: flex;
+    gap: var(--space-4);
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ---------- 小屏适配 ---------- */
+@media (max-width: 700px) {
+    .modal-card {
+        padding: 1.25rem;
+        border-radius: var(--radius-lg);
+        /* vw 约束已经处理窄屏，无需额外 max-width */
+    }
+
+    .modal-actions {
+        flex-wrap: wrap;
+    }
+
+    .confirm-dialog .confirm-message {
+        font-size: var(--font-size-lg);
+    }
+}

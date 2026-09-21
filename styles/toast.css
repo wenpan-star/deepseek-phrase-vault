@@ -1,0 +1,44 @@
+/* filename: styles/toast.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 通知条样式
+   底部居中浮层，2.2 秒后淡出。由 views/toast.js 动态创建
+   ======================================================================== */
+
+.toast-msg {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2f3ad9;
+    backdrop-filter: var(--backdrop-blur-md);
+    color: var(--color-text-on-primary);
+    padding: var(--space-3) var(--space-7);
+    border-radius: 80px;
+    font-size: var(--font-size-base);
+    z-index: var(--z-toast);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    max-width: 90vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.toast-msg i {
+    font-size: var(--font-size-md);
+    flex-shrink: 0;
+}
+
+@media (max-width: 700px) {
+    .toast-msg {
+        bottom: 20px;
+        padding: var(--space-3) var(--space-5);
+        font-size: var(--font-size-sm);
+        max-width: 92vw;
+    }
+}

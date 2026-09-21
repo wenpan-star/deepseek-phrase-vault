@@ -1,0 +1,89 @@
+/* filename: styles/search.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 搜索栏样式
+   包含：搜索框容器、输入框、清除按钮、正则开关、作用域切换按钮
+   高亮样式在 layout.css 中定义（.search-highlight）
+   ======================================================================== */
+
+.search-wrapper {
+    display: flex;
+    align-items: center;
+    background: var(--color-surface);
+    border-radius: var(--radius-pill);
+    padding: 0.1rem 0.8rem;
+    border: 1px solid var(--color-border-strong);
+    gap: var(--space-2);
+    flex: 1;
+    min-width: var(--search-wrapper-min-width);
+    max-width: var(--search-wrapper-max-width);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.search-wrapper:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.08);
+}
+
+.search-wrapper > i.fa-search {
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-md);
+    flex-shrink: 0;
+}
+
+.search-wrapper input {
+    border: none;
+    padding: var(--space-2) 0;
+    font-size: var(--font-size-base);
+    background: transparent;
+    outline: none;
+    width: 100%;
+    min-width: 0;
+}
+
+.search-wrapper input::placeholder {
+    color: var(--color-text-placeholder);
+}
+
+/* ---------- 搜索相关的三个小图标按钮 ---------- */
+.clear-search,
+.regex-toggle-btn,
+.search-scope-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-subtle);
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.clear-search:hover,
+.regex-toggle-btn:hover,
+.search-scope-btn:hover {
+    background: var(--color-primary-tint-light);
+    color: var(--color-primary);
+}
+
+.regex-toggle-btn.active {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+}
+
+.search-scope-btn.global-active {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+/* ---------- 小屏适配 ---------- */
+@media (max-width: 700px) {
+    .search-wrapper {
+        max-width: none;
+        width: 100%;
+    }
+}
