@@ -1,7 +1,8 @@
 /* filename: styles/modals.css */
 /* ========================================================================
    DeepSeek 语句工坊 · 模态框样式
-   包含：通用模态框外壳、卡片、颜色选择器、标签选择列表、确认对话框
+   包含：通用模态框外壳、卡片、颜色选择器、标签选择列表、确认对话框、
+         设置面板、回收站面板
    所有模态框 HTML 由 views/modals/*.js 动态注入，本文件只定义样式
    ======================================================================== */
 
@@ -42,7 +43,7 @@
  * 【尺寸模型】
  *   宽度：各模态框独立设置
  *   高度：各模态框独立设置
- *   编辑语句：尺寸由 JS 动态计算并写入 CSS 变量（本次重构）
+ *   编辑语句：尺寸由 JS 动态计算并写入 CSS 变量
  *   其余模态框：仍使用静态的 min(Npx, 92vw) 模式
  *
  * 【圆角】
@@ -119,6 +120,29 @@
     max-width: var(--modal-card-width-confirm);
     /* 内容短，不设 max-height，让内容自然撑开 */
     max-height: none;
+}
+
+/* 设置面板模态框
+ *
+ * 尺寸设定依据：
+ *   - 宽度 560px：足够容纳"标题 + 描述 + iOS 开关"一行排布
+ *   - 高度上限 600px / 75vh：设置项通常 5 条以内，超出后可滚动
+ */
+#settingsModal .modal-card {
+    max-width: min(560px, 92vw);
+    max-height: min(75vh, 600px);
+}
+
+/* 回收站面板模态框
+ *
+ * 尺寸设定依据：
+ *   - 宽度 720px：回收站条目需要比普通模态框更宽，才能显示
+ *     "标签徽章 + 时间 + 恢复 / 删除按钮"一行而不拥挤
+ *   - 高度上限 640px / 80vh：回收站可能有很多条目，允许更高的滚动区
+ */
+#recycleBinModal .modal-card {
+    max-width: min(720px, 92vw);
+    max-height: min(80vh, 640px);
 }
 
 /* ---------- 标题行（固定高度） ---------- */
@@ -344,6 +368,264 @@
     flex-shrink: 0;
 }
 
+/* ========================================================================
+   设置面板
+   ======================================================================== */
+
+.settings-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: var(--space-4) 0 var(--space-2) 0;
+    padding-right: var(--space-1);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.settings-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    background: #f8fafc;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.settings-item:hover {
+    background: #f1f5f9;
+    border-color: var(--color-border-default);
+}
+
+.settings-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-item-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-1);
+}
+
+.settings-item-title i {
+    color: var(--color-primary);
+    font-size: var(--font-size-base);
+    flex-shrink: 0;
+}
+
+.settings-item-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-subtle);
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+/* ---------- iOS 风格滑块开关 ---------- */
+.settings-toggle {
+    position: relative;
+    width: 48px;
+    height: 28px;
+    border-radius: 28px;
+    background: #cfd8dc;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    outline: none;
+    transition: background var(--transition-fast);
+}
+
+.settings-toggle:focus-visible {
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.25);
+}
+
+.settings-toggle.is-on {
+    background: var(--color-primary);
+}
+
+.settings-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform var(--transition-fast);
+    pointer-events: none;
+}
+
+.settings-toggle.is-on .settings-toggle-thumb {
+    transform: translateX(20px);
+}
+
+/* ========================================================================
+   回收站面板
+   ======================================================================== */
+
+.recycle-bin-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    padding: 0 0 var(--space-3);
+    border-bottom: 1px solid var(--color-border-subtle);
+    flex-shrink: 0;
+}
+
+.recycle-bin-toolbar .btn {
+    font-size: var(--font-size-sm);
+    padding: 4px 12px;
+}
+
+.recycle-bin-toolbar .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.recycle-bin-toolbar .btn:disabled:hover {
+    background: #ffffffcc;
+    border-color: var(--color-border-default);
+}
+
+.recycle-bin-count {
+    margin-left: auto;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-subtle);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.recycle-bin-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: var(--space-3) 0 0 0;
+    padding-right: var(--space-1);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* ---------- 单条回收站条目 ---------- */
+.recycle-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: #f8fafc;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.recycle-item:hover {
+    background: #f1f5f9;
+    border-color: var(--color-border-default);
+}
+
+.recycle-item-checkbox {
+    margin-top: 4px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.recycle-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.recycle-item-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-1);
+}
+
+.recycle-item-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-dark);
+    white-space: nowrap;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recycle-item-time {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-subtle);
+    white-space: nowrap;
+}
+
+.recycle-item-text {
+    font-size: var(--font-size-base);
+    color: var(--color-text-primary);
+    line-height: 1.5;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.recycle-item-actions {
+    display: flex;
+    gap: var(--space-1);
+    flex-shrink: 0;
+    align-items: flex-start;
+}
+
+/* 恢复按钮悬停：成功色 */
+.recycle-restore-btn:hover {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+/* 彻底删除按钮悬停：危险色 */
+.recycle-purge-btn:hover {
+    background: var(--color-danger-lighter);
+    color: var(--color-danger);
+}
+
+/* 空状态 */
+.recycle-bin-empty {
+    margin: var(--space-5) 0;
+    padding: 2rem;
+}
+
+.recycle-bin-empty i {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-5);
+    display: block;
+    color: var(--color-text-subtle);
+    opacity: 0.6;
+}
+
+.recycle-bin-empty p {
+    font-size: var(--font-size-md);
+    line-height: 1.6;
+}
+
 /* ---------- 小屏适配 ---------- */
 @media (max-width: 700px) {
     .modal-card {
@@ -358,5 +640,27 @@
 
     .confirm-dialog .confirm-message {
         font-size: var(--font-size-lg);
+    }
+
+    /* 小屏：回收站工具栏项换行，计数徽章独占一行 */
+    .recycle-bin-toolbar {
+        gap: var(--space-1);
+    }
+
+    .recycle-bin-toolbar .btn {
+        font-size: var(--font-size-xs);
+        padding: 4px 10px;
+    }
+
+    .recycle-bin-count {
+        margin-left: 0;
+        width: 100%;
+        text-align: right;
+        padding-top: var(--space-2);
+    }
+
+    /* 小屏：设置项的开关仍保持可点击面积 */
+    .settings-item {
+        padding: var(--space-3) var(--space-4);
     }
 }

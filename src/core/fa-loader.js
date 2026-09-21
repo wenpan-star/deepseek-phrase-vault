@@ -5,10 +5,13 @@
 // 降级方案：CSS（SVG 全部失败或超时后启用）
 // 冲突处理：SVG 成功后移除已注入的 CSS 链接
 //
-// 【重入保护】
+// 【重入保护（历史）】
 //   loadCss 有两条触发路径：SVG 全部 CDN 失败、SVG 加载 5 秒超时。
 //   若两条路径先后触发，会导致同一个 CSS 被注入两次。
 //   现通过 cssLoadStarted 标志位确保 loadCss 只启动一次。
+//
+// 【本轮深度审核（第二批）】
+//   本模块无需修改。
 // ========================================================================
 
 import {
@@ -20,7 +23,7 @@ import {
 let svgLoaded = false;
 let cssLoaded = false;
 let cssFallbackTriggered = false;
-// 新增：CSS 加载流程是否已启动（防重入）
+// CSS 加载流程是否已启动（防重入）
 let cssLoadStarted = false;
 
 /**

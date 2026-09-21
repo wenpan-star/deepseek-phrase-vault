@@ -1,57 +1,59 @@
 # filename: project-directory-tree.txt
 
-deepseek-statement-workshop/                ← 仓库名
+deepseek-statement-workshop/
 ├── .github/
 │   └── workflows/
 │       └── pages.yml
-├── .gitignore                              ← 屏蔽 .zip / node_modules / *.bak 等
-├── .nojekyll
-├── build.bat                               ← 根目录一键脚本（纯 ASCII，多镜像兜底）
+├── scripts/
+│   ├── data/
+│   │   └── 通用规范汉字表.xlsx
+│   └── tools/
+│       ├── tools-readme.md
+│       ├── generate-pinyin-data.js
+│       └── check-dict-gaps.js
 ├── src/
-│   ├── main.js
-│   ├── constants.js
-│   ├── preset.js
-│   ├── shortcuts.js
-│   ├── core/
-│   │   ├── vault.js
-│   │   ├── facade.js
-│   │   ├── crypto.js
-│   │   ├── persist.js
-│   │   └── fa-loader.js
 │   ├── commands/
 │   │   ├── index.js
 │   │   ├── statement-crud.js
 │   │   ├── statement-organize.js
 │   │   ├── tag-crud.js
 │   │   ├── ui-state.js
-│   │   └── search.js                       ← 集成首字母搜索
+│   │   ├── settings-crud.js
+│   │   ├── recycle-bin.js
+│   │   └── search.js
+│   ├── core/
+│   │   ├── vault.js
+│   │   ├── facade.js
+│   │   ├── crypto.js
+│   │   ├── persist.js
+│   │   └── fa-loader.js
 │   ├── utils/
 │   │   ├── dom.js
 │   │   ├── id.js
-│   │   ├── pinyin.js                       ← 手写逻辑，无数据
-│   │   ├── pinyin-data.js                  ← 自动生成（ES Module 数据）
-│   │   └── pinyin-data.js.bak              ← 首次运行 build.bat 后自动生成（git 忽略）
-│   └── views/
-│       ├── sidebar.js
-│       ├── header.js
-│       ├── search-bar.js
-│       ├── statement-list.js
-│       ├── statement-card.js
-│       ├── batch-bar.js
-│       ├── add-bar.js
-│       ├── toast.js
-│       └── modals/
-│           ├── confirm.js
-│           ├── edit.js
-│           ├── tag.js
-│           └── select-tag.js
-├── scripts/
-│   ├── data/
-│   │   └── 通用规范汉字表.xlsx              ← 唯一数据源（用户维护）
-│   └── tools/
-│       ├── README.md                       ← 工具说明
-│       ├── generate-pinyin-data.js         ← xlsx → src/utils/pinyin-data.js
-│       └── check-dict-gaps.js              ← 校验 pinyin-data.js 对 xlsx 的覆盖率
+│   │   ├── pinyin.js
+│   │   └── pinyin-data.js
+│   ├── views/
+│   │   ├── modals/
+│   │   │   ├── confirm.js
+│   │   │   ├── edit.js
+│   │   │   ├── tag.js
+│   │   │   ├── select-tag.js
+│   │   │   ├── settings.js
+│   │   │   └── recycle-bin-modal.js
+│   │   ├── sidebar.js
+│   │   ├── header.js
+│   │   ├── search-bar.js
+│   │   ├── statement-list.js
+│   │   ├── statement-card.js
+│   │   ├── batch-bar.js
+│   │   ├── add-bar.js
+│   │   ├── toast.js
+│   │   ├── more-menu.js
+│   │   └── recycle-card.js
+│   ├── main.js
+│   ├── constants.js
+│   ├── preset.js
+│   └── shortcuts.js
 ├── styles/
 │   ├── tokens.css
 │   ├── base.css
@@ -62,8 +64,12 @@ deepseek-statement-workshop/                ← 仓库名
 │   ├── statements.css
 │   ├── batch.css
 │   ├── modals.css
+│   ├── more-menu.css
 │   ├── toast.css
 │   └── icons.css
+├── .gitignore
+├── .nojekyll
+├── build.bat
 ├── index.html
 ├── README.md
 ├── LICENSE

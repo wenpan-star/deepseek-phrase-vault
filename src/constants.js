@@ -4,32 +4,20 @@
 // 所有"魔数"集中于此，任何模块不得内联硬编码
 //
 // 【历史调整】
-//   1. 新增 MAX_TAG_NAME_LENGTH：标签名称长度上限。
-//      供命令层（tag-crud.js）做防御性校验，UI 层（modals/tag.js）
-//      的 input maxlength 属性也保持与此一致。
-//   2. 删除 STORAGE_KEY_PLAIN_UI：早期设计的明文 UI 状态存储键，
-//      最终未采用（UI 状态随 Vault 一起加密），属死代码。
-//   3. 删除 SORTABLE_CDN：index.html 中已通过 <script src="...">
-//      直接硬编码了 Sortable.js 的 CDN 地址。保留本常量会导致
-//      "看起来可以改 CDN，实际改了无效"的误导。统一由 index.html
-//      作为唯一来源。
-//   4. 新增 STORAGE_KEY_ENCRYPTED_VAULT_BACKUP：
-//      当主存储键中存在数据但无法解密时（例如 Web Crypto 变为不可用），
-//      把原密文备份到此键，避免后续 save 覆盖导致数据永久丢失。
-//      修复点：W3（数据安全）。
+//   1. 新增 MAX_TAG_NAME_LENGTH：标签名称长度上限
+//   2. 删除 STORAGE_KEY_PLAIN_UI（死代码）
+//   3. 删除 SORTABLE_CDN（死代码）
+//   4. 新增 STORAGE_KEY_ENCRYPTED_VAULT_BACKUP（W3 数据保护）
+//   5. 删除 POPOVER_MAX_WIDTH_PX（8-3 修复）
 //
-// 【本次调整 · 8-3 修复】
-//   删除 POPOVER_MAX_WIDTH_PX。
-//
-//   背景：
-//     浮层宽度已改为"从 .card-index 左边缘 → .card-actions 左边缘"的
-//     实测距离，不再需要 640px 上限截断。该常量已不再被任何模块 import，
-//     保留会造成"看起来能改、实际改了无效"的误导。
-//
-//   POPOVER_MIN_WIDTH_PX 保留：
-//     仍在 statement-list.js 的 positionPopover 中作为测量异常时的
-//     绝对下限保护。虽然当前 DOM 结构下不会触发，但作为防御性兜底
-//     存在，注释中已说明。
+// 【本次调整 · 方案 A】
+//   1. 新增回收站相关常量：
+//        MAX_RECYCLE_BIN_SIZE      条数上限
+//        RECYCLE_BIN_RETENTION_DAYS 保留天数
+//        TIME_THRESHOLD_*          相对时间格式化阈值
+//   2. 新增 SETTINGS_DEFAULTS：所有设置项的默认值表。
+//      加新设置项只需在此表加一行，normalizeSettings 自动处理。
+//   3. 新增 MORE_MENU_POSITION_DELAY_MS 等交互时间参数。
 // ========================================================================
 
 // -------------------- 存储键 --------------------
@@ -94,6 +82,29 @@ export const MAX_IMPORT_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 // 单条语句的复制计数上限，防止异常数据污染排序
 export const MAX_COPY_COUNT = 1000000;
 
+// -------------------- 回收站参数（方案 A 新增）--------------------
+// 回收站条数上限：超过时淘汰最旧条目（FIFO）
+//
+// 取值依据：
+//   - 100 条足够覆盖"几天内误删多条目"的场景
+//   - 单条平均 200 字节，100 条约 20KB，加密后仍远小于 localStorage 上限
+//   - 超过 100 条后，用户多半已不记得当初删了什么
+export const MAX_RECYCLE_BIN_SIZE = 100;
+
+// 回收站保留天数：超过时在打开面板时清理
+//
+// 取值依据：
+//   - 30 天足够用户在"发现问题后想起来恢复"
+//   - 与多数邮箱的"垃圾箱保留 30 天"惯例一致
+export const RECYCLE_BIN_RETENTION_DAYS = 30;
+
+// 回收站时间格式化阈值（毫秒）
+// 用于将 deletedAt 时间戳转换为"3 分钟前"等易读字符串
+export const TIME_THRESHOLD_JUST_NOW_MS = 60 * 1000;              // < 1 分钟
+export const TIME_THRESHOLD_MINUTES_MS = 60 * 60 * 1000;          // < 1 小时
+export const TIME_THRESHOLD_HOURS_MS = 24 * 60 * 60 * 1000;       // < 1 天
+export const TIME_THRESHOLD_DAYS_MS = 30 * 24 * 60 * 60 * 1000;   // < 30 天
+
 // -------------------- 搜索作用域 --------------------
 export const SEARCH_SCOPE_LOCAL = "local";
 export const SEARCH_SCOPE_GLOBAL = "global";
@@ -109,6 +120,27 @@ export const SEARCH_SCOPE_GLOBAL = "global";
 //     正则匹配是同步操作，一旦开始执行就无法从外部打断，
 //     因此只能通过"不执行"来防御
 export const MAX_REGEX_KEYWORD_LENGTH = 200;
+
+// -------------------- 设置项默认值表（方案 A 新增）--------------------
+// 加新设置项只需在此表加一行。
+// normalizeSettings 会自动：
+//   1. 若原始值缺失 → 用默认值
+//   2. 若原始值类型与默认值不一致 → 用默认值
+//
+// 未来若需枚举校验（如 theme: 'light' | 'dark'），
+// 另加 SETTINGS_VALIDATORS 表在 normalizeSettings 中应用。
+//
+// 当前设置项：
+//   - enableInitialsSearch: 是否启用拼音首字母搜索
+//     默认 true：与历史行为一致，用户升级后无感知
+//
+// 未来扩展示例：
+//   - theme: 'light' | 'dark' | 'auto'
+//   - fontSize: 'small' | 'medium' | 'large'
+//   - language: 'zh-CN' | 'en-US'
+export const SETTINGS_DEFAULTS = {
+    enableInitialsSearch: true
+};
 
 // -------------------- Font Awesome CDN --------------------
 export const FONTAWESOME_SVG_CDNS = [
@@ -134,10 +166,20 @@ export const PERSIST_DEBOUNCE_MS = 400;
 export const EDIT_MODAL_FOCUS_DELAY_MS = 100;
 export const ADD_STATEMENT_SCROLL_DELAY_MS = 50;
 export const TAG_MODAL_FOCUS_DELAY_MS = 100;
-// 输入校验失败的抖动动画时长，与 styles/modals.css 中 @keyframes 保持一致
 export const INPUT_ERROR_SHAKE_DURATION_MS = 400;
 
-// -------------------- 语句卡片全文浮层 · 时间参数 --------------------
+// 更多菜单打开后的位置计算延迟（等待 DOM 渲染后测量）
+// 0ms 表示下一个宏任务立即执行；使用 setTimeout(0) 而非同步，
+// 是为了保证菜单元素已经完成布局（offsetWidth 可读）
+export const MORE_MENU_POSITION_DELAY_MS = 0;
+
+// 设置面板打开后的聚焦延迟（与编辑框保持一致）
+export const SETTINGS_MODAL_FOCUS_DELAY_MS = 100;
+
+// 回收站面板打开后的聚焦延迟
+export const RECYCLE_BIN_MODAL_FOCUS_DELAY_MS = 100;
+
+// -------------------- 语句卡片全文浮层 --------------------
 // 鼠标悬停在被截断的语句内容上时，延迟此毫秒数后显示全文浮层。
 //
 // 取值依据：

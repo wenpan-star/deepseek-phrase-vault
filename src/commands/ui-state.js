@@ -4,12 +4,19 @@
 // 包含：切换当前标签 / 搜索关键词 / 正则模式 / 搜索作用域 / 侧边栏展开
 // 全部为纯函数
 //
-// 【本次调整】
+// 【历史调整】
 //   删除 setScrollPositions 函数。
-//   原因：滚动位置已从 Vault 迁移到 sessionStorage（见 statement-list.js
-//         与 main.js 中的 scroll memory 相关函数），Vault 中不再承载
-//         mainListScrollTop / sidebarScrollTop 字段。
-//   该函数的原注册项（commands/index.js）也会同步移除。
+//
+// 【方案 A（上一轮）】
+//   1. 所有函数的返回对象补齐 recycleBin 和 settings 字段，
+//      保证 vault 顶层结构完整性。
+//   2. 移除 setInitialsSearchEnabled 函数。
+//      原因：该函数已在 commands/settings-crud.js 中实现，
+//            语义上属于"设置项变更"而非"UI 状态变更"。
+//            集中到 settings-crud.js 保持职责清晰。
+//
+// 【本轮深度审核（第二批）】
+//   本模块无需逻辑修改。
 // ========================================================================
 
 import { SEARCH_SCOPE_LOCAL } from '../constants.js';
@@ -31,6 +38,8 @@ export function switchTag(vault, payload) {
     return {
         tags: vault.tags,
         statementsMap: vault.statementsMap,
+        recycleBin: vault.recycleBin,
+        settings: vault.settings,
         uiState: {
             ...vault.uiState,
             currentTagId: tagId,
@@ -51,6 +60,8 @@ export function setSearchKeyword(vault, payload) {
     return {
         tags: vault.tags,
         statementsMap: vault.statementsMap,
+        recycleBin: vault.recycleBin,
+        settings: vault.settings,
         uiState: { ...vault.uiState, searchKeyword: keyword }
     };
 }
@@ -67,6 +78,8 @@ export function setUseRegex(vault, payload) {
     return {
         tags: vault.tags,
         statementsMap: vault.statementsMap,
+        recycleBin: vault.recycleBin,
+        settings: vault.settings,
         uiState: { ...vault.uiState, useRegex: useRegex }
     };
 }
@@ -83,6 +96,8 @@ export function setSearchScope(vault, payload) {
     return {
         tags: vault.tags,
         statementsMap: vault.statementsMap,
+        recycleBin: vault.recycleBin,
+        settings: vault.settings,
         uiState: { ...vault.uiState, searchScope: scope }
     };
 }
@@ -99,6 +114,8 @@ export function setSidebarExpanded(vault, payload) {
     return {
         tags: vault.tags,
         statementsMap: vault.statementsMap,
+        recycleBin: vault.recycleBin,
+        settings: vault.settings,
         uiState: { ...vault.uiState, sidebarExpanded: expanded }
     };
 }

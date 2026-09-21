@@ -3,16 +3,19 @@
 // DeepSeek 语句工坊 · 新建 / 编辑标签模态框
 // 返回 Promise<{ name: string, color: string|null } | null>
 //
-// 【修复要点】
+// 【修复要点（历史）】
 //   1. Escape 加 stopPropagation()
 //   2. Enter 加 isComposing 判定
 //   3. forceCloseTagModal 返回布尔值
 //
-// 【本次改进】
+// 【本次改进（历史）】
 //   空名称确认时不再静默 focus，而是：
 //     - 给 nameInput 添加 .input-error 类触发抖动动画与红色边框
 //     - 立即聚焦 input
 //   与 edit.js 的空文本反馈策略保持一致。
+//
+// 【本轮深度审核（第三批）】
+//   本模块无需逻辑修改。
 // ========================================================================
 
 import {

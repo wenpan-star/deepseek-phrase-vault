@@ -24,39 +24,80 @@
 //   宽度取值：直接等于上述距离，不做 640px 上限截断，
 //             也不做 300px 下限撑开（仅在测量异常时用 300px 兜底）
 //
-//   为什么这样改：
-//     旧实现使用 clamp(300, anchorRect.width, 640)，存在两个问题：
-//       ① 大屏时 anchorRect.width > 640，浮层被截断，比文字区窄
-//       ② 小屏时 anchorRect.width < 300，浮层被撑开，右边缘侵入按钮区
-//     新实现直接使用"序号左边缘 → 按钮区左边缘"的实测距离，
-//     天然满足"与文字区一样宽、永不超过功能键"的诉求。
+// 【方案 A（历史）】
+//   1. renderStatementList 中读取 vault.settings.enableInitialsSearch，
+//      并向 filterStatements / highlightText 传递第 4 个参数，
+//      使首字母搜索开关真正生效。
+//   2. 防御性读取：vault.settings 理论上必定存在（normalizeVault 保证），
+//      但用 `!!` 加短路保护，避免极端情况下读取到 undefined 抛错。
 //
-// 【P1-N1 修复（历史）】
-//   删除了未被任何调用方使用的导出函数：
-//     - getMainListScrollTop
-//     - setMainListScrollTop
+// 【第一批重构（历史）】
+//   问题 A（快速切标签时滚动位置丢失）：
+//     原实现的滚动保存流程：
+//       scroll 事件 → currentScrollTop 更新 → 150ms 防抖定时器
+//       定时器触发 → persistCurrentScrollPosition()
+//                   → 用 lastRenderedVault 计算上下文键
 //
-// 【W1 修复（历史）】
-//   修正了属性选择器中 CSS.escape 的错误用法。
-//   新增 escapeAttributeValueForSelector，只转义 CSS 字符串中
-//   真正需要转义的字符：反斜杠、双引号。
+//     若用户在 150ms 防抖窗口内点击另一个标签：
+//       1. dispatch('switchTag') → renderStatementList 执行
+//       2. lastRenderedVault 立即被覆盖为新标签
+//       3. 定时器触发时，用新标签的上下文键写入旧标签的滚动位置
+//          → 旧标签的滚动位置丢失；新标签被写入错误的滚动值
 //
-// 【本次调整 · 8-1 修复】
-//   调整了 positionPopover 中"下限保护分支"的注释。
+//     修复策略（双保险）：
+//       (a) scroll 事件里记录"滚动发生时"的上下文键到
+//           pendingScrollSaveSnapshot；定时器与 flush 时优先使用该快照，
+//           不再依赖 lastRenderedVault 事后重新计算。
+//       (b) main.js 的 handleTagClick 在 dispatch 前主动调用
+//           flushScrollPosition()，把防抖窗口内待保存的值立即落盘。
+//       二者叠加可覆盖任意切换时机的组合。
 //
-//   该分支当前在正常 DOM 结构下 never happens：
-//     · .card-actions 与 .card-index 的相对位置由 CSS 布局保证
-//     · cardActionsRect.left 必然大于 cardIndexRect.left
-//     · 若测量异常（差值 <= 0），会先走 anchorRect.width 兜底
+//   问题 E（toggleSelectAllVisible 中的引用共享）：
+//     原实现 `selectedStatementIds = visibleIdSet;` 直接赋同一引用。
+//     当前无 bug（visibleIdSet 是局部变量），但若未来有人把
+//     visibleIdSet 别处保存，会引入共享状态隐患。
+//     现改为 `selectedStatementIds = new Set(visibleIdSet);`。
 //
-//   保留此分支作为"DOM 结构被外部脚本破坏时"的绝对保险，
-//   避免浮层宽度为负值导致渲染异常。注释已更新为准确描述。
+//   问题 H（每次渲染重建 statementTextById）：
+//     保持现有实现。理由：全量 Map 构建是 O(N) 一次性操作，查询是 O(1)；
+//     相较逐卡片 findStatementById 的 O(N²) 整体更优。
+//     10000 条语句 ≈ 10–30ms，可接受。
 //
-// 【其他保留的对外接口】
-//   - getStatementCardViewportTopById（供 main.js 的滚动补偿使用）
-//   - compensateMainListScrollBy（供 main.js 的滚动补偿使用）
-//   - forceCloseFullTextPopover（供快捷键 Esc 使用）
-//   - flushScrollPosition（供 beforeunload 使用）
+// 【第二批重构（本轮）】
+//   问题 J（persistCurrentScrollPosition 使用 DOM 值而非记录值）：
+//     历史实现虽然"当前所有路径都安全"，但存在隐式契约：
+//     所有标签切换路径都必须先调用 flushScrollPosition。
+//     若未来新增路径（快捷键 / URL 跳转 / 其他批量操作自动切换）
+//     忘记调用，就会用新标签的 DOM 滚动值覆盖旧标签的记录：
+//       · pendingScrollSaveContextKey 保留为 'local:A'
+//       · mainListElement.scrollTop 已被新标签的 render 覆盖为 0
+//       · 写入 local:A = 0 → 标签 A 的位置丢失
+//
+//     修复：将 pending 从"仅存 contextKey"改为"存 {contextKey, scrollTop}
+//     快照对象"。scroll 事件中一次性记录两值，persistCurrentScrollPosition
+//     优先使用快照中的 scrollTop，避免读取已被渲染覆盖的 DOM 值。
+//
+//     补充：回退路径（从未滚动过 / 早期初始化）仍使用 DOM 值，
+//     因为此时不存在"记录值"的概念，DOM 值即当前状态的唯一真相源。
+//
+//   问题 K（statementTextById 全量构建）：
+//     原实现在 renderStatementList 开头无条件遍历所有标签的所有语句
+//     构建 statementTextById，O(N) 其中 N = 全部语句数（跨标签）。
+//     但 hover 浮层只对当前可见列表中的卡片触发，全量构建包含大量
+//     "当前不显示"的语句，浪费计算。
+//
+//     修复：把 Map 构建移到 visibleStatements 计算之后，
+//     仅遍历当前可见列表。语义上完全等价（浮层查询的 id 一定
+//     属于可见列表），性能上从 O(全部语句) 降为 O(可见语句)。
+//
+//     空状态分支（visibleStatements.length === 0）下，Map 为空，
+//     与"没有卡片可悬停"的语义一致。同时，由于每次用 new Map()
+//     重建，旧数据自动清空，不存在陈旧命中。
+//
+// 【历史版本】
+//   - 第四批深度审核：本模块无需逻辑修改。
+//   - 第一批重构：问题 A、E 修复。
+//   - 第二批重构：问题 J、K 修复。
 // ========================================================================
 
 import { $, escapeHtml } from '../utils/dom.js';
@@ -92,17 +133,24 @@ let lastRenderedVault = null;
 
 // ---------- 语句文本索引（供全文浮层查询） ----------
 // 结构：Map<statementId, text>
-// 在 renderStatementList 中重建。
-// 目的：将 getFullStatementText 的 O(N) 扫描降为 O(1)。
+// 在 renderStatementList 中用**当前可见列表**重建。
+// 目的：
+//   1. 将 getFullStatementText 的 O(N) 扫描降为 O(1)
+//   2. 只对可见语句建索引，避免全量遍历（问题 K 修复）
 let statementTextById = new Map();
 
 // ---------- 滚动位置状态 ----------
 // lastRenderedScrollContextKey：上一次渲染时所处的上下文键
-// currentScrollTop：本上下文下的"内存记忆"，避免 innerHTML 替换后丢失滚动
+// currentScrollTop：本上下文下的"内存记忆"，用于在上下文未变时
+//                   恢复 innerHTML 替换前的滚动位置
 // scrollSaveTimer：滚动保存防抖定时器
+// pendingScrollSaveSnapshot：滚动发生时记录的 { contextKey, scrollTop } 快照
+//   —— 用于在防抖窗口内切换标签时，仍能正确写回"发生滚动时所在的上下文"
+//      及其"滚动位置"（问题 J 修复）
 let lastRenderedScrollContextKey = null;
 let currentScrollTop = 0;
 let scrollSaveTimer = null;
+let pendingScrollSaveSnapshot = null;
 
 // ---------- 全文浮层状态 ----------
 // popoverElement：单例浮层 DOM（惰性创建）
@@ -334,17 +382,6 @@ function getFullStatementText(statementId) {
  *     · 右边界：功能按钮之前（不遮挡任何按钮）
  *   直接采用该区间作为宽度，视觉上与"文字区一样宽"完全一致。
  *
- * 【为什么不做 clamp 上限】
- *   旧实现使用 clamp(300, anchorRect.width, 640) 有两大问题：
- *     ① 大屏时 anchorRect.width > 640，浮层被截断，比文字区窄
- *     ② 小屏时 anchorRect.width < 300，浮层被撑开，右边缘侵入按钮区
- *   新实现直接使用实测距离，天然避免这两个问题。
- *
- * 【下限兜底】
- *   仅在测量异常（如 DOM 结构被外部脚本破坏、CSS 被极端修改）时，
- *   使用 POPOVER_MIN_WIDTH_PX 作为下限保证可读性。
- *   正常布局下 never happens（见下方注释）。
- *
  * @param {HTMLElement} popover
  * @param {HTMLElement} anchorElement   卡片文本区（.card-content）
  * @param {HTMLElement} cardElement     整张卡片（.statement-card）
@@ -381,14 +418,6 @@ function positionPopover(popover, anchorElement, cardElement) {
     }
 
     // 只在极端异常时启用下限保护。
-    //
-    // 【说明】此分支在当前 DOM 结构下 never happens：
-    //   · .card-actions 与 .card-index 的相对位置由 CSS 布局保证
-    //   · cardActionsRect.left 必然大于 cardIndexRect.left
-    //   · 若测量异常（差值 <= 0），会先走上方 anchorRect.width 兜底
-    //
-    // 保留此分支作为**DOM 结构被外部脚本破坏时**的绝对保险，
-    // 避免浮层宽度为负值导致渲染异常。
     if (popoverWidth < POPOVER_MIN_WIDTH_PX) {
         popoverWidth = POPOVER_MIN_WIDTH_PX;
     }
@@ -570,13 +599,38 @@ function handleCardContentMouseOut(event) {
 
 /**
  * 绑定主列表滚动监听（内部实现，与 main.js 解耦）
+ *
+ * 【第一批重构 · 问题 A】
+ *   滚动发生时立即记录当时的上下文键到 pendingScrollSaveSnapshot。
+ *   后续 persistCurrentScrollPosition 优先使用该快照写入 sessionStorage，
+ *   避免防抖窗口内切标签时用"新标签的上下文"覆盖"旧标签的位置"。
+ *
+ * 【第二批重构 · 问题 J】
+ *   快照对象同时记录 scrollTop 值。原因：
+ *     若只记录 contextKey，而 persistCurrentScrollPosition 内部读取
+ *     mainListElement.scrollTop，则在"防抖窗口内切标签"的场景下，
+ *     DOM 的 scrollTop 已被新标签的 render 覆盖为 0，导致写入旧标签
+ *     的记录值为 0（位置丢失）。
+ *   现在快照同时携带 scrollTop，persistCurrentScrollPosition 优先使用
+ *   快照值而非 DOM 实时值，保证写入的是"滚动发生时的位置"。
  */
 function bindScrollMemoryInternal() {
     if (!mainListElement) return;
     mainListElement.addEventListener('scroll', function () {
         currentScrollTop = mainListElement.scrollTop;
+
+        // 记录"发生滚动时"的上下文键与滚动位置快照
+        // 若 lastRenderedVault 尚不可用（应用初始化早期），保持原值不变
+        if (lastRenderedVault) {
+            pendingScrollSaveSnapshot = {
+                contextKey: computeScrollContextKey(lastRenderedVault),
+                scrollTop: mainListElement.scrollTop
+            };
+        }
+
         if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
         scrollSaveTimer = setTimeout(function () {
+            scrollSaveTimer = null;
             persistCurrentScrollPosition();
         }, SCROLL_SAVE_DEBOUNCE_MS);
     }, { passive: true });
@@ -605,20 +659,60 @@ function getScrollStorageKey(contextKey) {
 
 /**
  * 立即把当前滚动位置写入 sessionStorage
+ *
+ * 【第一批重构 · 问题 A】
+ *   上下文键优先使用 pendingScrollSaveSnapshot（滚动发生时记录），
+ *   只有当该值缺失（从未滚动过）时才回退到用 lastRenderedVault 计算。
+ *
+ *   这样在"防抖窗口内切标签"的场景下：
+ *     · scroll 时记录键 = local:标签A
+ *     · 用户切到标签B → renderStatementList 执行，lastRenderedVault 变为 B
+ *     · flush 触发 → 使用记录的键 local:标签A 写入 → 位置写入正确
+ *
+ * 【第二批重构 · 问题 J】
+ *   滚动位置值同样优先使用快照中的 scrollTop，避免读取 DOM 实时值：
+ *     · DOM 值在切标签后会被 restoreMainListScroll 覆盖为新标签的位置
+ *     · 快照值恒等于"发生滚动时"的位置，语义上明确
+ *
+ *   回退路径（从未滚动过 / 早期初始化）仍使用 DOM 值：
+ *     此时不存在快照概念，DOM 值即当前状态的唯一真相源。
  */
 function persistCurrentScrollPosition() {
-    if (!mainListElement || !lastRenderedVault) return;
-    const contextKey = computeScrollContextKey(lastRenderedVault);
+    if (!mainListElement) return;
+
+    let contextKey;
+    let scrollTopToSave;
+
+    if (pendingScrollSaveSnapshot) {
+        // 优先使用"滚动发生时"记录的快照
+        contextKey = pendingScrollSaveSnapshot.contextKey;
+        scrollTopToSave = pendingScrollSaveSnapshot.scrollTop;
+    } else if (lastRenderedVault) {
+        // 回退：从未滚动过（或 lastRenderedVault 尚不可用）时，
+        // 用当前 vault 计算上下文，用 DOM 实时值作为滚动位置
+        contextKey = computeScrollContextKey(lastRenderedVault);
+        scrollTopToSave = mainListElement.scrollTop;
+    } else {
+        // 两个来源都不可用：无法确定写入目标，直接返回
+        return;
+    }
+
+    if (!contextKey) return;
+
     const storageKey = getScrollStorageKey(contextKey);
     try {
-        sessionStorage.setItem(storageKey, String(mainListElement.scrollTop));
+        sessionStorage.setItem(storageKey, String(scrollTopToSave));
     } catch (storageError) {
         console.warn('[statement-list] sessionStorage 写入失败:', storageError);
     }
+
+    // 写入完成后清空待保存快照，避免后续无滚动时重复写入旧键
+    pendingScrollSaveSnapshot = null;
 }
 
 /**
  * 导出给 main.js：beforeunload 时强制保存滚动位置
+ * 也用于"切标签前主动 flush"，避免防抖窗口内丢位置
  */
 export function flushScrollPosition() {
     if (scrollSaveTimer) {
@@ -678,22 +772,16 @@ export function renderStatementList(vault) {
 
     lastRenderedVault = vault;
 
-    // ---------- 重建语句文本索引 ----------
-    // 用于全文浮层的 O(1) 查询。
-    // 每次渲染重建，确保与最新 vault 一致。
-    statementTextById = new Map();
-    for (const tagId of Object.keys(vault.statementsMap)) {
-        const list = vault.statementsMap[tagId];
-        for (let statementIndex = 0; statementIndex < list.length; statementIndex++) {
-            const statementItem = list[statementIndex];
-            statementTextById.set(statementItem.id, statementItem.text);
-        }
-    }
-
     const currentTagId = vault.uiState.currentTagId;
     const isGlobalMode = vault.uiState.searchScope === SEARCH_SCOPE_GLOBAL;
     const keyword = vault.uiState.searchKeyword;
     const useRegex = vault.uiState.useRegex;
+
+    // 读取首字母搜索开关
+    // vault.settings 理论上必定存在（normalizeVault 保证），
+    // 但用短路保护 + 双非，避免极端情况下读取到 undefined 抛错。
+    const enableInitialsSearch = !!(vault.settings
+        && vault.settings.enableInitialsSearch);
 
     // 计算可见列表
     let visibleStatements;
@@ -712,19 +800,42 @@ export function renderStatementList(vault) {
             }
         }
         if (keyword) {
-            visibleStatements = filterStatements(visibleStatements, keyword, useRegex);
+            visibleStatements = filterStatements(
+                visibleStatements,
+                keyword,
+                useRegex,
+                enableInitialsSearch
+            );
         }
     } else {
         // 本地模式：只取当前标签
         const localList = vault.statementsMap[currentTagId] || [];
         if (keyword) {
-            visibleStatements = filterStatements(localList, keyword, useRegex);
+            visibleStatements = filterStatements(
+                localList,
+                keyword,
+                useRegex,
+                enableInitialsSearch
+            );
         } else if (currentTagId === DEFAULT_TAG_ID) {
             // 默认标签且无搜索：按 copyCount 降序
             visibleStatements = sortByCopyCount(localList);
         } else {
             visibleStatements = localList.slice();
         }
+    }
+
+    // ---------- 用可见列表重建语句文本索引（问题 K 修复） ----------
+    // 原实现无条件遍历所有标签的全部语句，即使这些语句当前不可见。
+    // 现改为只对可见列表建索引：
+    //   · 语义完全等价（浮层只对可见卡片触发，查询 id 一定属于可见列表）
+    //   · 性能从 O(全部语句) 降为 O(可见语句)
+    //   · 用 new Map() 重建，自动清空旧数据，不存在陈旧命中
+    //   · 空状态分支下 Map 为空，与"没有卡片可悬停"的语义一致
+    statementTextById = new Map();
+    for (let index = 0; index < visibleStatements.length; index++) {
+        const statementItem = visibleStatements[index];
+        statementTextById.set(statementItem.id, statementItem.text);
     }
 
     currentVisibleStatementIds = visibleStatements.map(function (statement) {
@@ -761,7 +872,12 @@ export function renderStatementList(vault) {
     let html = '';
     visibleStatements.forEach(function (statement, index) {
         const highlightedHtml = keyword
-            ? highlightText(statement.text, keyword, useRegex)
+            ? highlightText(
+                statement.text,
+                keyword,
+                useRegex,
+                enableInitialsSearch
+            )
             : escapeHtml(statement.text);
         html += renderStatementCard(statement, {
             displayIndex: index + 1,
@@ -820,7 +936,7 @@ function toggleStatementSelection(statementId) {
     if (lastRenderedVault) {
         // 只更新该复选框和 batch bar，避免全量重绘丢焦点。
         //
-        // 【W1 修复】使用 escapeAttributeValueForSelector 而非 CSS.escape：
+        // 使用 escapeAttributeValueForSelector 而非 CSS.escape：
         // CSS.escape 是为 CSS 标识符设计的，在属性选择器的引号字符串
         // 上下文中会引入多余的反斜杠，导致匹配失败。
         const escapedId = escapeAttributeValueForSelector(statementId);
@@ -861,6 +977,11 @@ export function clearStatementSelection(shouldRerender) {
 
 /**
  * 全选 / 取消全选
+ *
+ * 【第一批重构 · 问题 E】
+ *   原实现 `selectedStatementIds = visibleIdSet;` 直接共享引用。
+ *   现改为赋新 Set，切断与局部变量的引用耦合。
+ *
  * @returns {boolean} true 表示执行了全选
  */
 export function toggleSelectAllVisible() {
@@ -873,7 +994,8 @@ export function toggleSelectAllVisible() {
     if (isAllSelected) {
         selectedStatementIds.clear();
     } else {
-        selectedStatementIds = visibleIdSet;
+        // 赋新 Set，避免与 visibleIdSet 共享引用
+        selectedStatementIds = new Set(visibleIdSet);
     }
 
     if (lastRenderedVault) {
@@ -919,8 +1041,7 @@ export function scrollMainListToBottom() {
  *   - 若卡片存在且在主列表容器内：返回 `getBoundingClientRect().top`
  *   - 若卡片不存在（被删除 / 被搜索过滤掉）：返回 null
  *
- * 【W1 修复】使用 escapeAttributeValueForSelector 而非 CSS.escape。
- * 详见 toggleStatementSelection 中的注释。
+ * 使用 escapeAttributeValueForSelector 而非 CSS.escape。
  *
  * @param {string} statementId
  * @returns {number|null}

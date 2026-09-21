@@ -55,6 +55,8 @@
     <link rel="stylesheet" href="./styles/modals.css">
     <link rel="stylesheet" href="./styles/toast.css">
     <link rel="stylesheet" href="./styles/icons.css">
+    <!-- 方案 A 新增：更多菜单样式 -->
+    <link rel="stylesheet" href="./styles/more-menu.css">
     <!-- Sortable.js 锁定版本（避免 @latest 未来不兼容更新） -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -102,6 +104,12 @@
                 <input type="file" id="importFileInput" accept=".json" style="display: none;">
                 <button class="btn btn-outline" id="resetDefaultBtn" type="button">
                     <i class="fas fa-lightbulb" aria-hidden="true"></i> 重置全局
+                </button>
+                <!-- 方案 A 新增：更多菜单按钮 -->
+                <button class="btn btn-outline" id="moreMenuBtn" type="button"
+                        aria-haspopup="menu" aria-expanded="false" aria-label="更多操作">
+                    <i class="fas fa-ellipsis-h" aria-hidden="true"></i> 更多
+                    <i class="fas fa-chevron-down more-menu-chevron" aria-hidden="true"></i>
                 </button>
             </div>
         </header>

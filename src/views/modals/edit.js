@@ -10,7 +10,7 @@
 //   4. textarea rows 从 3 改为 6，配合 CSS flex: 1 + min-height
 //   5. 空文本保存时触发抖动动画与红色边框，避免用户误以为按钮失灵
 //
-// 【本次重构 · 动态尺寸】
+// 【动态尺寸（历史重构）】
 //   编辑模态框尺寸改为按主列表布局动态计算：
 //     · 宽度 = （序号左边缘 → 按钮区左边缘 的距离）× 2/3
 //     · 高度 = 视口高度 × 1/2
@@ -28,13 +28,8 @@
 //     · CSS 层的 #editModal .modal-card 规则引用这两个变量
 //     · 每次打开模态框前调用一次；窗口 resize 时若模态框打开也刷新
 //
-//   为什么用 CSS 变量而非直接设置 style：
-//     项目约定所有尺寸走 tokens.css 的设计令牌。JS 计算的值
-//     仍然通过 CSS 变量注入，保持 CSS 侧声明式的一致性。
-//
-//   为什么空状态下不报错：
-//     computeAndApplyEditModalSize 内部检测 .statement-card 是否存在，
-//     不存在时直接 return，CSS 变量保持 tokens.css 中的默认值。
+// 【本轮深度审核（第四批）】
+//   本模块无需逻辑修改。
 // ========================================================================
 
 import {
@@ -268,10 +263,10 @@ export function openEditModal(options) {
         cleanup();
     }
 
-    // 【本次重构】打开前根据当前主列表布局动态计算模态框尺寸
+    // 打开前根据当前主列表布局动态计算模态框尺寸
     computeAndApplyEditModalSize();
 
-    // 【本次重构】确保 resize 监听已绑定（只需一次）
+    // 确保 resize 监听已绑定（只需一次）
     bindResizeListenerOnce();
 
     textareaElement.value = options.initialText || '';

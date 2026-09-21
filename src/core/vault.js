@@ -4,21 +4,31 @@
 // 本模块严禁 import 任何 UI、DOM、存储相关模块
 // 所有函数均为纯函数：输入 vault，输出新值，绝不修改入参
 //
-// 【安全强化】
-//   normalizeVault 现执行严格校验：
+// 【安全强化（历史）】
+//   normalizeVault 执行严格校验：
 //     - 标签颜色仅接受 PRESET_COLORS 白名单（杜绝 CSS 注入）
 //     - 丢弃 id 或 name 为空的标签，杜绝幽灵标签
 //     - statementsMap 中无主标签的键被丢弃
 //     - uiState 逐字段做类型断言，非法值回退默认
 //
-// 【滚动位置策略（本次调整）】
-//   滚动位置不再进入 Vault 持久化。理由：
-//     1. 滚动是纯会话级瞬态——无需跨设备同步、无需加密存储
-//     2. sessionStorage 的写入频率高、数据量小，比加密存储更合适
-//     3. 之前的实现中 uiState.mainListScrollTop / sidebarScrollTop
-//        从未被任何渲染函数读取，属于死字段
-//   normalizeVault 仍会静默忽略旧数据里残留的这两个字段，
-//   以保证从 v4 早期版本升级时不会因数据形状变化而失败。
+// 【滚动位置策略（历史调整）】
+//   滚动位置不进入 Vault 持久化，由 sessionStorage 独立管理。
+//   normalizeVault 静默忽略旧数据里残留的 mainListScrollTop /
+//   sidebarScrollTop 字段。
+//
+// 【方案 A（上一轮）】
+//   1. 新增 vault.settings 命名空间：
+//        与 uiState 分离，用于存放用户偏好（跨会话持久，
+//        未来可参与"配置同步"，与"重置 UI 状态"解耦）
+//   2. 新增 vault.recycleBin 数组：
+//        存放软删除的语句。每条记录包含来源标签快照
+//        （id / name / color）与删除时间。
+//   3. 新增 normalizeSettings / normalizeRecycleBin 两个归一化函数
+//
+// 【本轮深度审核（第一批 / 第二批）】
+//   本模块无需逻辑修改。
+//   ensureDefaultTagExists 在返回对象中已正确携带 recycleBin
+//   与 settings，保持 Vault 顶层结构完整性。
 // ========================================================================
 
 import {
@@ -27,38 +37,47 @@ import {
     SEARCH_SCOPE_LOCAL,
     SEARCH_SCOPE_GLOBAL,
     PRESET_COLORS,
-    MAX_COPY_COUNT
+    MAX_COPY_COUNT,
+    SETTINGS_DEFAULTS,
+    MAX_RECYCLE_BIN_SIZE
 } from '../constants.js';
 import { getBuiltinPreset } from '../preset.js';
 
 // -------------------- 形状构造 --------------------
 
 /**
- * 创建一个空 Vault（含默认 uiState）
+ * 创建一个空 Vault
  *
- * 注意：uiState 中不再包含 mainListScrollTop / sidebarScrollTop。
- *       滚动位置由 sessionStorage 独立管理，见 statement-list.js /
- *       main.js 中的 scroll memory 相关函数。
+ * 结构：
+ *   {
+ *     tags: [],
+ *     statementsMap: {},
+ *     recycleBin: [],
+ *     uiState: { ...会话级瞬态... },
+ *     settings: { ...用户偏好... }
+ *   }
  *
- * @returns {{tags: Array, statementsMap: Object, uiState: Object}}
+ * @returns {{tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
  */
 export function createEmptyVault() {
     return {
         tags: [],
         statementsMap: {},
+        recycleBin: [],
         uiState: {
             currentTagId: null,
             sidebarExpanded: false,
             searchKeyword: "",
             useRegex: false,
             searchScope: SEARCH_SCOPE_LOCAL
-        }
+        },
+        settings: normalizeSettings(null)
     };
 }
 
 /**
  * 将内置预设转为标准 Vault 结构
- * @returns {{tags: Array, statementsMap: Object, uiState: Object}}
+ * @returns {{tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
  */
 export function createVaultFromBuiltinPreset() {
     const preset = getBuiltinPreset();
@@ -120,12 +139,153 @@ export function normalizeStatements(statementList) {
 }
 
 /**
+ * 归一化回收站数组。
+ *
+ * 每条记录的合法形状：
+ *   {
+ *     id:                原语句 ID（字符串，非空）
+ *     text:              语句文本（字符串，非空）
+ *     copyCount:         复制计数（整数）
+ *     sourceTagId:       来源标签 ID（字符串，可能已失效）
+ *     sourceTagName:     来源标签名快照（字符串）
+ *     sourceTagColor:    来源标签颜色快照（白名单或 null）
+ *     deletedAt:         删除时间戳（毫秒）
+ *     deletionSource:    'single' | 'batch'（UI 展示用）
+ *   }
+ *
+ * 清洗规则：
+ *   - 缺 id 或 text → 丢弃
+ *   - deletedAt 非有效数字 → 丢弃
+ *   - sourceTagColor 非法 → null
+ *   - deletionSource 非法 → 'single'
+ *   - 总条数超过 MAX_RECYCLE_BIN_SIZE → 保留最新的 N 条
+ *
+ * @param {Array} rawRecycleBin
+ * @returns {Array}
+ */
+export function normalizeRecycleBin(rawRecycleBin) {
+    if (!Array.isArray(rawRecycleBin)) return [];
+
+    const result = [];
+    const seenIds = new Set();
+
+    for (const rawItem of rawRecycleBin) {
+        if (!rawItem || typeof rawItem !== 'object') continue;
+
+        const itemId = rawItem.id == null ? '' : String(rawItem.id).trim();
+        const itemText = rawItem.text == null ? '' : String(rawItem.text);
+        if (!itemId || !itemText.trim()) continue;
+        if (seenIds.has(itemId)) continue;
+        seenIds.add(itemId);
+
+        let copyCount = 0;
+        if (typeof rawItem.copyCount === 'number'
+            && Number.isFinite(rawItem.copyCount)) {
+            copyCount = Math.max(
+                0,
+                Math.min(Math.floor(rawItem.copyCount), MAX_COPY_COUNT)
+            );
+        }
+
+        const sourceTagId = rawItem.sourceTagId == null
+            ? ''
+            : String(rawItem.sourceTagId);
+        const sourceTagName = rawItem.sourceTagName == null
+            ? ''
+            : String(rawItem.sourceTagName).trim();
+        const sourceTagColor = PRESET_COLORS.includes(rawItem.sourceTagColor)
+            ? rawItem.sourceTagColor
+            : null;
+
+        let deletedAt = 0;
+        if (typeof rawItem.deletedAt === 'number'
+            && Number.isFinite(rawItem.deletedAt)
+            && rawItem.deletedAt > 0) {
+            deletedAt = Math.floor(rawItem.deletedAt);
+        } else {
+            // 无有效时间戳的条目视为"很久以前删除"，时间戳回退到 0
+            // （会被后续排序和淘汰规则自然处理）
+            deletedAt = 0;
+        }
+
+        const deletionSource = (rawItem.deletionSource === 'batch')
+            ? 'batch'
+            : 'single';
+
+        result.push({
+            id: itemId,
+            text: itemText,
+            copyCount: copyCount,
+            sourceTagId: sourceTagId,
+            sourceTagName: sourceTagName,
+            sourceTagColor: sourceTagColor,
+            deletedAt: deletedAt,
+            deletionSource: deletionSource
+        });
+    }
+
+    // 保留最新的 MAX_RECYCLE_BIN_SIZE 条
+    // 排序基准：deletedAt 降序（越新越靠前）
+    // 时间戳相同时用 id 字典序作次级排序键（保证稳定）
+    if (result.length > MAX_RECYCLE_BIN_SIZE) {
+        result.sort(function (itemA, itemB) {
+            if (itemB.deletedAt !== itemA.deletedAt) {
+                return itemB.deletedAt - itemA.deletedAt;
+            }
+            return itemB.id.localeCompare(itemA.id);
+        });
+        return result.slice(0, MAX_RECYCLE_BIN_SIZE);
+    }
+
+    return result;
+}
+
+/**
+ * 归一化 settings 对象。
+ *
+ * 策略：
+ *   以 SETTINGS_DEFAULTS 为唯一真相源，逐字段校验：
+ *     - 原始值缺失 → 用默认值
+ *     - 原始值类型与默认值不一致 → 用默认值
+ *     - 一致 → 保留原始值
+ *
+ * 未来若需枚举校验（如 theme: 'light' | 'dark'），
+ * 增加 SETTINGS_VALIDATORS 表，在类型校验后应用自定义断言。
+ *
+ * @param {Object|null} rawSettings
+ * @returns {Object}
+ */
+export function normalizeSettings(rawSettings) {
+    const source = (rawSettings && typeof rawSettings === 'object')
+        ? rawSettings
+        : {};
+
+    const result = {};
+    const settingKeys = Object.keys(SETTINGS_DEFAULTS);
+
+    for (let keyIndex = 0; keyIndex < settingKeys.length; keyIndex++) {
+        const settingKey = settingKeys[keyIndex];
+        const defaultValue = SETTINGS_DEFAULTS[settingKey];
+        const rawValue = source[settingKey];
+
+        if (rawValue !== undefined
+            && typeof rawValue === typeof defaultValue) {
+            result[settingKey] = rawValue;
+        } else {
+            result[settingKey] = defaultValue;
+        }
+    }
+
+    return result;
+}
+
+/**
  * 归一化完整 Vault：补全所有缺失字段，剔除非法数据
  *
  * 向后兼容说明：
- *   旧版本数据可能在 uiState 中包含 mainListScrollTop / sidebarScrollTop。
- *   本函数会静默忽略这些字段——不会报错，也不会把它们复制到新 uiState。
- *   这是有意为之：滚动位置已迁移至 sessionStorage，Vault 中不再承载它。
+ *   旧版本数据可能在 uiState 中包含 mainListScrollTop / sidebarScrollTop，
+ *   也可能完全缺少 recycleBin / settings 字段。
+ *   本函数静默处理所有这些差异，保证从任意历史版本升级都不会失败。
  *
  * @param {Object} rawVault
  * @returns {Object}
@@ -167,6 +327,11 @@ export function normalizeVault(rawVault) {
         }
     }
 
+    // ---------- recycleBin 归一化（方案 A）----------
+    const normalizedRecycleBin = normalizeRecycleBin(
+        rawVault && rawVault.recycleBin
+    );
+
     // ---------- uiState 归一化 ----------
     const rawUiState = (rawVault
         && rawVault.uiState
@@ -197,10 +362,17 @@ export function normalizeVault(rawVault) {
         searchScope: normalizedSearchScope
     };
 
+    // ---------- settings 归一化（方案 A）----------
+    const normalizedSettings = normalizeSettings(
+        rawVault && rawVault.settings
+    );
+
     return {
         tags: normalizedTags,
         statementsMap: normalizedStatementsMap,
-        uiState: normalizedUiState
+        recycleBin: normalizedRecycleBin,
+        uiState: normalizedUiState,
+        settings: normalizedSettings
     };
 }
 
@@ -246,7 +418,13 @@ export function ensureDefaultTagExists(vault) {
     }
 
     if (!modified) return vault;
-    return { tags: tags, statementsMap: statementsMap, uiState: uiState };
+    return {
+        tags: tags,
+        statementsMap: statementsMap,
+        recycleBin: vault.recycleBin,
+        uiState: uiState,
+        settings: vault.settings
+    };
 }
 
 // -------------------- 查询 --------------------
@@ -288,6 +466,21 @@ export function findStatementById(vault, statementId) {
         }
     }
     return null;
+}
+
+/**
+ * 在回收站中查找条目
+ * @param {Object} vault
+ * @param {string} recycleBinItemId
+ * @returns {Object|null}
+ */
+export function findRecycleBinItemById(vault, recycleBinItemId) {
+    if (!recycleBinItemId) return null;
+    if (!Array.isArray(vault.recycleBin)) return null;
+    const item = vault.recycleBin.find(function (binItem) {
+        return binItem.id === recycleBinItemId;
+    });
+    return item || null;
 }
 
 /**

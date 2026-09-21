@@ -1,0 +1,140 @@
+/* filename: styles/more-menu.css */
+/* ========================================================================
+   DeepSeek 语句工坊 · 更多菜单样式
+   配合 src/views/more-menu.js 使用
+   ========================================================================
+ *
+ * 【布局策略】
+ *   由 JS 动态设置 top / right（见 more-menu.js 的 applyMenuPosition），
+ *   本文件只负责视觉外观与动画。
+ *
+ * 【z-index】
+ *   950：位于 sidebar（--z-sidebar: 20）之上、
+ *        modal（--z-modal: 1000）之下。
+ *   这样菜单永远在侧边栏上层，但不会遮挡模态框。
+ *
+ * 【动画】
+ *   淡入 + 轻微下移（4px） + 微缩放（0.98），origin 在右上角，
+ *   与菜单从按钮右上方展开的视觉方向一致。
+ * ======================================================================== */
+
+.more-menu {
+    position: fixed;
+    display: none;
+    min-width: 220px;
+    max-width: 280px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: var(--space-2) 0;
+    z-index: 950;
+    transform-origin: top right;
+    animation: moreMenuFadeIn var(--transition-fast) ease-out;
+}
+
+.more-menu.is-open {
+    display: block;
+}
+
+@keyframes moreMenuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ---------- 菜单项 ---------- */
+.more-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-3) var(--space-5);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    text-align: left;
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.more-menu-item:hover,
+.more-menu-item:focus-visible {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+    outline: none;
+}
+
+.more-menu-item:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+.more-menu-item i {
+    width: 18px;
+    font-size: var(--font-size-lg);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    text-align: center;
+    transition: color var(--transition-fast);
+}
+
+.more-menu-item:hover i,
+.more-menu-item:focus-visible i {
+    color: var(--color-primary);
+}
+
+.more-menu-item-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------- 回收站计数徽章 ---------- */
+.more-menu-item-badge {
+    display: none;
+    color: var(--color-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    margin-left: var(--space-2);
+    flex-shrink: 0;
+}
+
+/* ---------- 分隔线 ---------- */
+.more-menu-divider {
+    height: 1px;
+    background: var(--color-border-default);
+    margin: var(--space-2) 0;
+}
+
+/* ---------- 更多按钮上的 ▾ 箭头 ---------- */
+/* 菜单打开时翻转 180°（由 more-menu.js 添加 .is-active 类触发） */
+.more-menu-chevron {
+    display: inline-block;
+    margin-left: var(--space-1);
+    font-size: 0.75em;
+    transition: transform var(--transition-fast);
+}
+
+#moreMenuBtn.is-active .more-menu-chevron {
+    transform: rotate(180deg);
+}
+
+/* ---------- 小屏适配 ---------- */
+@media (max-width: 700px) {
+    .more-menu {
+        min-width: 200px;
+        font-size: var(--font-size-sm);
+    }
+
+    .more-menu-item {
+        padding: var(--space-3) var(--space-4);
+    }
+}

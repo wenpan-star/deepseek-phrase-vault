@@ -20,7 +20,7 @@
 //      索引的映射 + 原文按 codePoint 拆分的字符数组"，供 search.js 的
 //      highlightText 精确高亮首字母命中的汉字。
 //
-// 【本次改进 · M5 + P2-N4 修复】
+// 【M5 + P2-N4 修复（历史）】
 //   反查 Map 构建时增加双重守卫：
 //     守卫 1：PINYIN_INITIAL_DATA 整体有效性检查。
 //             若数据文件被污染为 Node.js 脚本（历史上发生过），
@@ -34,11 +34,26 @@
 //             for...of 会抛 TypeError（不可迭代）。
 //             现改为严格 string 类型判断，非法值仅告警不崩溃。
 //
-// 【对外导出】
-//   - getInitials(text)                        → string
-//   - mapTextToInitials(text)                  → { initials, positions, characters }
-//   - hasChineseCharacterInitial(character)    → boolean（调试用）
-//   - getChineseCharacterInitialMapSize()      → number（调试用）
+// 【对外导出说明（本轮重构 · 问题 D）】
+//   · getInitials(text)                  —— 备用 API
+//       语义与 mapTextToInitials(text).initials 完全等价。
+//       保留原因：作为"仅需首字母串"场景的最简 API 契约，
+//       与 mapTextToInitials 一起构成完整的能力集：
+//         · 仅需首字母串         → getInitials
+//         · 需首字母 + 索引 + 字符 → mapTextToInitials
+//       当前项目内部未调用 getInitials；但作为公共 API 保留，
+//       供未来简化调用点（如仅展示首字母、不做高亮）时使用。
+//
+//   · hasChineseCharacterInitial(character) —— 调试 API
+//   · getChineseCharacterInitialMapSize()   —— 调试 API
+//       保留原因：本地开发时可在浏览器控制台快速验证数据表状态：
+//         · hasChineseCharacterInitial('支')  → 判断某汉字是否已收录
+//         · getChineseCharacterInitialMapSize() → 返回收录总数
+//       零构建项目不打包，保留成本为零，对维护有实际价值。
+//
+// 【历史版本】
+//   - 第二批深度审核：本模块无需逻辑修改。
+//   - 本次重构：更新注释明确各导出的用途。
 // ========================================================================
 
 import { PINYIN_INITIAL_DATA } from './pinyin-data.js';
@@ -147,6 +162,13 @@ function isChineseCharacter(character) {
 /**
  * 从文本中提取中文字符的拼音首字母。
  *
+ * 【使用场景】
+ *   备用 API。若仅需首字母串、不需要字符位置映射（例如预览、
+ *   单行展示），调用本函数即可，无需 mapTextToInitials 的额外开销。
+ *
+ *   当前项目内部的高亮场景统一使用 mapTextToInitials，
+ *   以保证首字母匹配区间与文本字符索引一致。
+ *
  * 处理规则：
  *   - 中文汉字：若在数据表中，追加其拼音首字母（小写）。
  *   - 中文汉字但不在数据表中：静默跳过。
@@ -251,7 +273,12 @@ export function mapTextToInitials(text) {
 
 /**
  * 判断字符是否已收录在拼音数据表中。
- * 仅用于测试与调试，业务代码无需调用。
+ *
+ * 【调试 API】
+ *   供本地开发在浏览器控制台快速验证数据表状态：
+ *     pinyin.hasChineseCharacterInitial('支')  // → true
+ *
+ *   业务代码无需调用。
  *
  * @param {string} character
  * @returns {boolean}
@@ -261,7 +288,14 @@ export function hasChineseCharacterInitial(character) {
 }
 
 /**
- * 返回拼音数据表已收录的汉字总数。仅用于测试与调试。
+ * 返回拼音数据表已收录的汉字总数。
+ *
+ * 【调试 API】
+ *   供本地开发在浏览器控制台快速验证数据表规模：
+ *     pinyin.getChineseCharacterInitialMapSize()  // → 8105 左右
+ *
+ *   业务代码无需调用。
+ *
  * @returns {number}
  */
 export function getChineseCharacterInitialMapSize() {

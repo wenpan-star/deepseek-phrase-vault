@@ -4,12 +4,38 @@
 // 渲染标签列表、支持 Sortable 拖拽、双击编辑、单击切换、删除
 // 通过回调通知外部，不直接操作状态
 //
-// 【本次调整】
+// 【历史调整】
 //   删除 restoreSidebarScroll 与 getSidebarScrollTop 两个导出函数。
 //   原因：侧边栏滚动位置的保存与恢复由 main.js 中的
 //         bindSidebarScrollMemory / restoreSidebarScrollState 全权负责，
 //         直接操作 #sidebarTagsList 元素。
 //   本模块中的这两个函数从未被任何调用方引用，属死代码，予以删除。
+//
+// 【本轮重构（第一批）】
+//   1. 新增 syncSidebarExpandedState(expanded) 导出：
+//      用于把 vault.uiState.sidebarExpanded 的权威值同步到本模块内部的
+//      pinnedState 与 CSS 类。
+//
+//      背景（问题 C）：
+//        在导入完整备份或重置全局时，replaceVault 会替换整个 Vault，
+//        包含 uiState.sidebarExpanded。原实现中：
+//          · pinnedState 仅在 initializeSidebar 时初始化一次
+//          · subscribe('ui') 只更新搜索栏与计数，不处理 sidebar 展开态
+//        导致"用户在某台设备以展开态导出 → 在另一台设备以收起态导入"后，
+//        sidebar 视觉状态与 vault.uiState.sidebarExpanded 数据不一致。
+//
+//      设计要点：
+//        · 值相同时立即返回，是幂等操作
+//        · 仅更新 pinnedState 与 CSS 类，不触发 onToggleExpand
+//          （避免"同步状态 → dispatch → 再同步"的循环）
+//        · 桌面模式下若鼠标恰好悬停，hover 展开的 CSS 由 :hover 规则
+//          独立驱动，与 .expanded 类不冲突
+//
+//   2. 渲染函数、事件绑定、Sortable 逻辑保持原样。
+//
+// 【历史版本】
+//   - 第三批深度审核：本模块无需逻辑修改。
+//   - 本次重构：问题 C 修复。
 // ========================================================================
 
 import { $, escapeHtml } from '../utils/dom.js';
@@ -223,4 +249,34 @@ function initializeSortable() {
             handlers.onTagReorder(orderedIds);
         }
     });
+}
+
+/**
+ * 同步侧边栏展开状态到内部 pinnedState 与 CSS 类。
+ *
+ * 【用途】
+ *   把 vault.uiState.sidebarExpanded 的权威值同步到本模块的内部状态。
+ *   主要调用场景：
+ *     · main.js 的 subscribe('ui') 回调（导入 / 重置后 uiState 被替换）
+ *
+ * 【设计要点】
+ *   1. 幂等：值相同时立即返回，无任何副作用。
+ *   2. 只更新本地状态与 CSS，不触发 onToggleExpand 回调——
+ *      避免"同步 → dispatch → 再同步"的循环。
+ *   3. 桌面模式下的 hover 展开由 CSS :hover 规则独立驱动，
+ *      与 .expanded 类不冲突，本函数无需感知鼠标位置。
+ *   4. 触屏模式下 .expanded 类直接控制展开，本函数的效果与用户
+ *      点击 header 切换等价。
+ *
+ * @param {boolean} expanded 目标展开状态
+ */
+export function syncSidebarExpandedState(expanded) {
+    const nextExpanded = !!expanded;
+    if (pinnedState === nextExpanded) return;
+
+    pinnedState = nextExpanded;
+
+    if (sidebarElement) {
+        sidebarElement.classList.toggle('expanded', nextExpanded);
+    }
 }

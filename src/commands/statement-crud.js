@@ -2,11 +2,38 @@
 // ========================================================================
 // DeepSeek 语句工坊 · 语句增 / 改 / 删
 // 全部为纯函数，输入旧 Vault，输出新 Vault，绝不修改入参
+//
+// 【方案 A（上一轮）】
+//   deleteStatement 改为**软删除**：
+//     - 从 statementsMap 中移除（用户视角：语句消失）
+//     - 追加到 recycleBin（保留可恢复能力）
+//     - 记录来源标签快照（id / name / color）
+//     - 记录删除时间戳与删除来源（single / batch）
+//
+//   为什么软删除：
+//     - 用户误删是高频场景，回收站提供兜底
+//     - 与主流应用（Notion / Gmail / macOS Finder）一致
+//     - 命令名保持 deleteStatement 不变，用户感知的"删除"语义一致
+//
+//   硬删除（彻底删除）能力由 commands/recycle-bin.js 提供
+//
+//   关于返回对象：
+//     所有命令的返回对象现在都包含 recycleBin 和 settings 两个字段，
+//     即使命令本身不修改它们，也保持引用传递。
+//     原因：vault 的顶层结构完整性必须由每个命令维护，
+//           否则 Facade 检测到 nextVault === previousVault 时会误判
+//
+// 【本轮深度审核（第二批）】
+//   本模块无需逻辑修改。
 // ========================================================================
 
 import { generateUniqueId } from '../utils/id.js';
 import { isDuplicateInTag } from '../core/vault.js';
-import { MAX_COPY_COUNT } from '../constants.js';
+import {
+    MAX_COPY_COUNT,
+    MAX_RECYCLE_BIN_SIZE,
+    PRESET_COLORS
+} from '../constants.js';
 
 /**
  * 新增单条语句
@@ -31,11 +58,13 @@ export function addStatement(vault, payload) {
 
     return {
         tags: vault.tags,
-        uiState: vault.uiState,
         statementsMap: {
             ...vault.statementsMap,
             [tagId]: [...vault.statementsMap[tagId], newStatement]
-        }
+        },
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
@@ -88,11 +117,13 @@ export function addStatementsBatch(vault, payload) {
 
     return {
         tags: vault.tags,
-        uiState: vault.uiState,
         statementsMap: {
             ...vault.statementsMap,
             [tagId]: [...targetList, ...newStatements]
-        }
+        },
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
@@ -136,16 +167,26 @@ export function editStatement(vault, payload) {
 
     return {
         tags: vault.tags,
-        uiState: vault.uiState,
         statementsMap: {
             ...vault.statementsMap,
             [targetTagId]: newList
-        }
+        },
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
 /**
- * 删除语句
+ * 删除语句（软删除）
+ *
+ * 流程：
+ *   1. 定位语句与其所属标签
+ *   2. 从 statementsMap 中移除
+ *   3. 构造回收站条目（含来源标签快照）
+ *   4. 前置到 recycleBin（越新越靠前）
+ *   5. 若超过 MAX_RECYCLE_BIN_SIZE，截断末尾（最旧的）
+ *
  * @param {Object} vault
  * @param {{ statementId: string }} payload
  * @returns {Object} 新 Vault
@@ -154,28 +195,59 @@ export function deleteStatement(vault, payload) {
     const statementId = payload.statementId;
     if (!statementId) return vault;
 
+    // 定位语句
     let targetTagId = null;
+    let targetStatement = null;
     for (const tagId of Object.keys(vault.statementsMap)) {
-        const found = vault.statementsMap[tagId].some(function (item) {
+        const list = vault.statementsMap[tagId];
+        const statement = list.find(function (item) {
             return item.id === statementId;
         });
-        if (found) {
+        if (statement) {
             targetTagId = tagId;
+            targetStatement = statement;
             break;
         }
     }
-    if (!targetTagId) return vault;
+    if (!targetTagId || !targetStatement) return vault;
 
+    // 从 statementsMap 中移除
     const newList = vault.statementsMap[targetTagId].filter(function (item) {
         return item.id !== statementId;
     });
 
+    // 构造回收站条目
+    const sourceTag = vault.tags.find(function (tag) {
+        return tag.id === targetTagId;
+    });
+
+    const recycleBinItem = {
+        id: targetStatement.id,
+        text: targetStatement.text,
+        copyCount: typeof targetStatement.copyCount === 'number'
+            ? targetStatement.copyCount
+            : 0,
+        sourceTagId: targetTagId,
+        sourceTagName: sourceTag ? sourceTag.name : '',
+        sourceTagColor: (sourceTag && PRESET_COLORS.includes(sourceTag.color))
+            ? sourceTag.color
+            : null,
+        deletedAt: Date.now(),
+        deletionSource: 'single'
+    };
+
+    // 前置新条目并截断
+    const newRecycleBin = [recycleBinItem, ...vault.recycleBin]
+        .slice(0, MAX_RECYCLE_BIN_SIZE);
+
     return {
         tags: vault.tags,
-        uiState: vault.uiState,
         statementsMap: {
             ...vault.statementsMap,
             [targetTagId]: newList
-        }
+        },
+        recycleBin: newRecycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }

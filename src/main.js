@@ -26,30 +26,76 @@
 //   W2（下载链接 DOM 挂载）
 //   W3（persist.js 中的解密失败备份保护）
 //
-// 【第 7 轮补充修复（本轮 N1 / N2）】
-//   N1（Safari 下载兼容性强化）：
-//     handleExport 中把 downloadLink 的 display: none 改为
-//     屏幕外绝对定位（position: absolute; left: -9999px）。
+// 【第 7 轮补充修复（N1 / N2）】
+//   N1（Safari 下载兼容性强化）
+//   N2（iOS Safari 剪贴板降级路径兼容性）
 //
-//     背景：
-//       部分 Safari 版本（15 之前）会检查下载元素是否"renderable"。
-//       display: none 的元素被判定为不可渲染，即使挂载到 DOM 树中，
-//       也会跳过下载调度。
+// 【方案 A 收尾（历史）】
+//   1. computeVisibleCount 补 matchSearch 第 4 参数（enableInitialsSearch）。
+//   2. 初始化 more-menu，订阅 'recycleBin' 切片更新徽章。
+//   3. 新增 8 个 handlers。
+//   4. renderAll 首屏调用 updateMoreMenuBadge 设定初始值。
 //
-//       屏幕外定位既满足"在 DOM 树中"（W2 的初衷），
-//       又满足"可渲染"（N1 的目标），是跨浏览器最稳的做法。
+// 【第一批深度审核修复（历史）】
+//   C1（模块路径不匹配 —— 阻塞级）
+//   C2（设置面板无 UI 入口）
+//   C3（导出数据缺失 recycleBin 与 settings）
+//   C4（replaceVault 切片列表遗漏 'recycleBin'）
+//   M1（批量删除未警告回收站溢出）
+//   M3（设置开关回滚依赖 dispatch 布尔返回值语义）
 //
-//   N2（iOS Safari 剪贴板降级路径兼容性）：
-//     copyTextToClipboard 中删除冗余的 setSelectionRange 调用。
+// 【第一批重构（历史）】
+//   问题 A（快速切标签时滚动位置丢失）：
+//     handleTagClick 在 dispatch('switchTag') 之前调用
+//     flushScrollPosition()，把防抖窗口内待保存的滚动位置立即落盘。
+//     与 statement-list.js 中"scroll 事件记录上下文键"的修复形成双保险。
 //
-//     背景：
-//       iOS Safari 对 readonly textarea 调用 setSelectionRange 可能抛
-//       InvalidStateError。一旦抛异常，execCommand('copy') 不会执行，
-//       用户看到"复制失败"。而实际上 select() 已完整选中内容，
-//       execCommand 本可成功。
+//   问题 B（批量恢复被取消时选中集被清空）：
+//     handleRecycleRestoreBatch / handleRecyclePurgeBatch /
+//     handleRecycleClearAll 显式返回 boolean：
+//       · 返回 true  = 操作已执行（可能部分成功）
+//       · 返回 false = 用户主动取消，未执行任何操作
+//     与 recycle-bin-modal.js 的返回值判断逻辑对齐。
 //
-//       删除冗余调用（select() 已等价于 setSelectionRange(0, length)），
-//       可最大化跨浏览器成功率。
+//   问题 C（导入后侧边栏展开状态失同步）：
+//     · subscribe('ui') 中调用 syncSidebarExpandedState，
+//       把 vault.uiState.sidebarExpanded 的权威值同步到 sidebar.js。
+//     · 该调用是幂等的（值相同时立即返回），无副作用。
+//
+// 【第二批重构（本轮）】
+//   问题 I（bootstrap 未处理 initializeFacade 返回 null）：
+//     FA-4 修复后，initializeFacade 在 loadVaultFromStorage 抛异常时
+//     会返回 null（而非抛异常）。但 bootstrap 未检查返回值，直接
+//     继续执行 initializeAllViews，而 initializeAllViews 内部第一行
+//     就是 getVaultSnapshot().uiState.sidebarExpanded——会在 null 上
+//     抛 TypeError，被 bootstrap().catch 捕获后只显示"应用启动失败"，
+//     掩盖真实根因（数据加载失败 vs 其他异常）。
+//
+//     修复：
+//       · bootstrap 中检查返回值
+//       · 为 null 时：记录明确错误日志 + 用户提示 + 提前返回
+//       · 不执行后续初始化（不注册命令、不初始化视图、不渲染）
+//
+//     为什么不自动回退到内置预设：
+//       若加载失败是因为存储损坏（例如 localStorage 读取异常、
+//       解密失败但 persist.js 未识别），自动回退并用预设覆盖会
+//       丢失备份键 ds_encrypted_vault_v4_backup 中的原始数据。
+//       让用户主动刷新 / 联系支持是更保守的选择。
+//
+//   问题 M（剪贴板降级的 console.warn 刷屏）：
+//     在 HTTP 上下文中（例如本地 http://localhost 之外的开发环境、
+//     企业内网非 HTTPS 部署），navigator.clipboard.writeText 每次
+//     调用都会失败。原实现每次失败都 console.warn，用户长时间使用
+//     会积累大量重复日志。
+//
+//     修复：增加模块级布尔标志 hasLoggedModernClipboardFailure。
+//     仅在本会话首次失败时 warn（保留完整信息，含 Error 对象），
+//     后续调用静默降级。这属于"日志降噪"而非"删除日志"——
+//     首次 warn 完整保留，开发者仍可在控制台第一时间看到问题。
+//
+//     为什么不改用 console.debug：
+//       console.debug 在 Chrome DevTools 默认过滤级别下不显示，
+//       会让开发者错过诊断信息。用"首次 warn"策略兼顾两者。
 // ========================================================================
 
 import {
@@ -69,14 +115,16 @@ import {
     SESSION_KEY_SIDEBAR_SCROLL_POSITION,
     SCROLL_SAVE_DEBOUNCE_MS,
     ADD_STATEMENT_SCROLL_DELAY_MS,
-    MAX_IMPORT_FILE_SIZE_BYTES
+    MAX_IMPORT_FILE_SIZE_BYTES,
+    MAX_RECYCLE_BIN_SIZE
 } from './constants.js';
 import {
     createVaultFromBuiltinPreset,
     findStatementById,
     getAllStatementsWithTags,
     normalizeVault,
-    ensureDefaultTagExists
+    ensureDefaultTagExists,
+    isDuplicateInTag
 } from './core/vault.js';
 import { matchSearch } from './commands/search.js';
 
@@ -85,10 +133,13 @@ import { showConfirmDialog } from './views/modals/confirm.js';
 import { openEditModal } from './views/modals/edit.js';
 import { openTagModal } from './views/modals/tag.js';
 import { openSelectTagModal } from './views/modals/select-tag.js';
+import { openSettingsModal } from './views/modals/settings.js';
+import { openRecycleBinModal } from './views/modals/recycle-bin-modal.js';
 
 import {
     initializeSidebar,
-    renderSidebar
+    renderSidebar,
+    syncSidebarExpandedState
 } from './views/sidebar.js';
 import { initializeHeader, updateHeaderStats } from './views/header.js';
 import {
@@ -115,7 +166,17 @@ import {
     initializeAddBar,
     clearAddBarInput
 } from './views/add-bar.js';
+import {
+    initializeMoreMenu,
+    updateMoreMenuBadge
+} from './views/more-menu.js';
 import { initializeShortcuts } from './shortcuts.js';
+
+// ==================== 模块级状态（剪贴板日志降噪，问题 M） ====================
+// 语义：本会话是否已经记录过"现代 Clipboard API 失败"的警告。
+// 用途：避免在 HTTP 上下文中每次复制都刷 console.warn。
+// 生命周期：模块级，不进入 Vault，不持久化；页面刷新后重置。
+let hasLoggedModernClipboardFailure = false;
 
 // ==================== 浏览器剪贴板 ====================
 
@@ -127,24 +188,16 @@ import { initializeShortcuts } from './shortcuts.js';
  *   2. 若现代 API 不存在，或调用时抛异常（例如在 HTTP 上下文、
  *      或用户拒绝权限），则回退到旧的 execCommand('copy')
  *
- * 【R2 修复说明】
- *   此前实现中，若 `navigator.clipboard.writeText` 抛异常，
- *   异常会传播到调用方（handleCardCopy 的 catch），
- *   显示"复制失败"，但实际上 execCommand 是可用的。
- *   现改为：现代 API 失败时仍尝试 execCommand，最大化成功率。
+ * 【问题 M 修复 · 日志降噪】
+ *   在 HTTP 上下文中，现代 API 每次调用都会失败。若每次都 warn，
+ *   用户长时间使用会积累大量重复日志。
  *
- * 【N2 修复说明（本轮）】
- *   删除了降级路径中的 setSelectionRange 调用。
+ *   修复：用模块级标志 hasLoggedModernClipboardFailure 记录"是否
+ *   已警告过"。首次失败时记录完整 warn（含错误对象），后续失败
+ *   静默降级。这保留了首次诊断信息，同时避免日志刷屏。
  *
- *   原因：
- *     iOS Safari 对 readonly textarea 调用 setSelectionRange 时可能抛
- *     InvalidStateError。一旦抛异常，execCommand('copy') 不会执行，
- *     用户看到"复制失败"——而实际上 select() 已完整选中内容，
- *     execCommand 本可成功。
- *
- *     而 select() 在功能上等价于 setSelectionRange(0, value.length)，
- *     因此 setSelectionRange 调用本身是冗余的。
- *     删除冗余调用可最大化跨浏览器成功率。
+ *   该标志不重置（除非页面刷新），因为失败是环境级属性，
+ *   同一会话内不会自愈。
  *
  * @param {string} text
  * @returns {Promise<void>} 两条路径均失败时抛出异常
@@ -156,12 +209,15 @@ async function copyTextToClipboard(text) {
             await navigator.clipboard.writeText(text);
             return;
         } catch (modernClipboardError) {
-            // 现代 API 失败（例如 HTTP 上下文、权限被拒、页面失焦等），
-            // 记录日志后继续尝试路径 2。不直接抛异常，避免错过 fallback。
-            console.warn(
-                '[main] 现代剪贴板 API 失败，尝试 execCommand 降级:',
-                modernClipboardError
-            );
+            // 【问题 M 修复】仅在本会话首次失败时 warn
+            if (!hasLoggedModernClipboardFailure) {
+                hasLoggedModernClipboardFailure = true;
+                console.warn(
+                    '[main] 现代剪贴板 API 失败，将使用 execCommand 降级。'
+                    + '此消息仅在本会话首次失败时记录。',
+                    modernClipboardError
+                );
+            }
         }
     }
 
@@ -185,7 +241,7 @@ async function copyTextToClipboard(text) {
 
     try {
         textareaElement.select();
-        // 【N2 修复】不再调用 setSelectionRange：
+        // 不再调用 setSelectionRange：
         //   · select() 已经完整选中 textarea 内容，等价于
         //     setSelectionRange(0, textareaElement.value.length)
         //   · iOS Safari 对 readonly textarea 调用 setSelectionRange
@@ -206,6 +262,33 @@ async function copyTextToClipboard(text) {
 
 // ==================== 应用初始化 ====================
 
+/**
+ * 应用启动主流程。
+ *
+ * 【问题 I 修复 · 加载失败保护】
+ *   initializeFacade 在 loadVaultFromStorage 抛异常时会返回 null
+ *   （见 facade.js 的 FA-4 保护）。此时不能继续初始化视图层——
+ *   否则 initializeAllViews 内部的第一行 getVaultSnapshot().uiState
+ *   会在 null 上抛 TypeError，掩盖真实根因。
+ *
+ *   修复策略：
+ *     1. 检查 initializeFacade 返回值
+ *     2. 为 null 时：记录明确的错误日志 + 用户提示 + 提前返回
+ *     3. 不执行后续初始化（不注册命令、不初始化视图、不渲染）
+ *
+ *   为什么不自动回退到内置预设：
+ *     若加载失败是因为存储损坏（例如 localStorage 读取异常、
+ *     解密失败但 persist.js 未识别、vault 结构严重损坏），
+ *     自动回退并用预设覆盖会丢失备份键
+ *     ds_encrypted_vault_v4_backup 中的原始数据。
+ *     让用户主动刷新 / 联系支持是更保守的选择——备份键里的
+ *     密文仍然完整保留，具备人工恢复的可能性。
+ *
+ *   用户可见行为：
+ *     · Toast 显示"应用数据加载失败，请刷新页面重试"
+ *     · 页面保持"已加载但未初始化"状态
+ *     · 用户手动刷新可再次尝试（可能与临时性存储异常有关）
+ */
 async function bootstrap() {
     // 1. Font Awesome 异步加载，不阻塞初始化
     initializeFontAwesomeLoader();
@@ -214,7 +297,26 @@ async function bootstrap() {
     initializeToast();
 
     // 3. 初始化 Facade（从存储加载 Vault）
-    await initializeFacade({ toastHandler: showMessage });
+    const loadedVault = await initializeFacade({ toastHandler: showMessage });
+
+    // ---------- 【问题 I 修复】检查加载结果 ----------
+    if (!loadedVault) {
+        console.error(
+            '[main] Vault 加载失败：initializeFacade 返回 null。'
+            + '应用将保持未初始化状态，不执行后续渲染。'
+            + '可能原因：localStorage 读取异常 / 数据解密失败 / '
+            + '浏览器禁用了本地存储。'
+        );
+        showMessage(
+            '⚠️ 应用数据加载失败。请刷新页面重试；若持续失败，'
+            + '请检查浏览器是否禁用了本地存储。',
+            true
+        );
+        // 提前返回：不注册命令、不初始化视图、不渲染
+        // 保持页面在"静态 HTML 已加载，但 JS 侧未启动"状态，
+        // 用户刷新可重试
+        return;
+    }
 
     // 3.1 明文降级提示（Web Crypto 不可用时，数据实际以明文保存）
     if (!isCryptoAvailable()) {
@@ -294,6 +396,13 @@ function initializeAllViews() {
         onAdd: handleAddStatement
     });
 
+    initializeMoreMenu({
+        onOpenRecycleBin: handleOpenRecycleBin,
+        onOpenShortcutsHelp: handleOpenShortcutsHelp,
+        onOpenSettings: handleOpenSettings,
+        onOpenAbout: handleOpenAbout
+    });
+
     // 订阅状态变更
     subscribe('tags', function () {
         renderSidebar(getVaultSnapshot());
@@ -310,6 +419,18 @@ function initializeAllViews() {
             searchScope: vault.uiState.searchScope
         });
         updateHeaderStats(computeVisibleCount());
+        // 【第一批重构 · 问题 C】同步侧边栏展开状态
+        // 场景：导入完整备份 / 重置全局时 replaceVault 替换整个 Vault，
+        //       uiState.sidebarExpanded 可能与 sidebar.js 内部的 pinnedState
+        //       不同步。此调用保证两者始终一致。
+        // 该函数幂等：值相同时立即返回，无副作用、不触发 dispatch。
+        syncSidebarExpandedState(vault.uiState.sidebarExpanded);
+    });
+    // 订阅回收站切片 → 更新徽章
+    subscribe('recycleBin', function () {
+        const vault = getVaultSnapshot();
+        if (!vault || !Array.isArray(vault.recycleBin)) return;
+        updateMoreMenuBadge(vault.recycleBin.length);
     });
 }
 
@@ -327,11 +448,36 @@ function renderAll() {
         selectedCount: getSelectedStatementIds().size,
         allSelected: isAllVisibleSelected()
     });
+    // 首屏设定更多菜单的徽章计数
+    if (vault && Array.isArray(vault.recycleBin)) {
+        updateMoreMenuBadge(vault.recycleBin.length);
+    }
 }
 
 // ==================== 标签事件 ====================
 
+/**
+ * 切换标签
+ *
+ * 【第一批重构 · 问题 A】
+ *   在 dispatch('switchTag') 之前先 flush 主列表的滚动位置。
+ *
+ *   背景：
+ *     statement-list.js 的滚动保存采用 150ms 防抖。若用户在防抖
+ *     窗口内切换标签，renderStatementList 会立即把 lastRenderedVault
+ *     更新为新标签，导致定时器触发时用错误的上下文键写入。
+ *
+ *     虽然 statement-list.js 已经通过"scroll 事件记录上下文键 + 滚动
+ *     位置快照"做了双重防御，但主动 flush 后，防抖窗口立即结束，
+ *     不存在"待保存"的中间态，是更稳妥的双保险。
+ *
+ *   本调用是幂等的：若无待保存的滚动位置，persistCurrentScrollPosition
+ *   内部会因无有效快照与 lastRenderedVault 状态而无操作。
+ *
+ * @param {string} tagId
+ */
 function handleTagClick(tagId) {
+    flushScrollPosition();
     dispatch('switchTag', { tagId: tagId });
 }
 
@@ -552,8 +698,6 @@ async function handleCardCopy(statementId) {
         const previousViewportTop = getStatementCardViewportTopById(statementId);
 
         // 判断卡片原本是否在视口内
-        // 只有视口内的卡片才需要滚动补偿；视口外的卡片位置变化
-        // 不会影响用户的视觉焦点，强行补偿反而会造成"列表莫名跳动"
         const wasCardInViewport = previousViewportTop !== null
             && previousViewportTop >= 0
             && previousViewportTop <= window.innerHeight;
@@ -608,10 +752,6 @@ async function handleCardCopyToTag(statementId) {
     const targetTagId = result.tagId;
 
     // 【R4 防御】检查目标标签是否存在
-    // 理论上 openSelectTagModal 返回的 tagId 来自 candidateTags，
-    // 而 candidateTags 来自当前 vault，一定存在。
-    // 但纯防御性检查可避免极端情况（例如异步过程中 vault 被替换）下的
-    // TypeError 崩溃。
     const targetTag = vault.tags.find(function (tag) {
         return tag.id === targetTagId;
     });
@@ -706,6 +846,12 @@ function handleBatchSelectAll() {
  *   再 dispatch（触发一次渲染）。
  * 这样渲染函数看到的选中集就是"已清空"的，无需在内部
  * 隐式清理选中状态，职责更清晰。
+ *
+ * 【M1 修复】回收站溢出警告。
+ *   当待删除数量超过 MAX_RECYCLE_BIN_SIZE 时，多余的条目会被
+ *   从回收站挤出并永久删除。此约束在原实现中未在确认框中提示，
+ *   用户会误以为"所有删除都能恢复"。现附加明确的警告文案，
+ *   让用户在点击"确定"之前充分知情。
  */
 async function handleBatchDelete() {
     const selectedIds = getSelectedStatementIds();
@@ -716,7 +862,7 @@ async function handleBatchDelete() {
         return selectedIds.has(statement.id);
     });
 
-    // 【N5 修复】按 codePoint 截断预览，避免断开 surrogate pair。
+    // 按 codePoint 截断预览，避免断开 surrogate pair。
     const previewLines = allSelected.slice(0, 3).map(function (statement) {
         const allCharacters = Array.from(statement.text);
         if (allCharacters.length > 30) {
@@ -726,10 +872,18 @@ async function handleBatchDelete() {
     }).join('\n');
     const moreSuffix = allSelected.length > 3 ? '\n...' : '';
 
-    const confirmed = await showConfirmDialog(
-        '确定删除选中的 ' + selectedIds.size + ' 条语句吗？\n\n'
-        + previewLines + moreSuffix
-    );
+    let confirmMessage = '确定删除选中的 ' + selectedIds.size + ' 条语句吗？\n\n'
+        + previewLines + moreSuffix;
+
+    // 【M1 修复】回收站溢出警告
+    if (selectedIds.size > MAX_RECYCLE_BIN_SIZE) {
+        const overflowCount = selectedIds.size - MAX_RECYCLE_BIN_SIZE;
+        confirmMessage += '\n\n⚠️ 回收站容量上限为 ' + MAX_RECYCLE_BIN_SIZE
+            + ' 条。本次删除后，最旧的 ' + overflowCount
+            + ' 条将被永久移除，无法恢复。';
+    }
+
+    const confirmed = await showConfirmDialog(confirmMessage);
     if (!confirmed) return;
 
     // 先清空选中（不渲染），再 dispatch（触发一次渲染）
@@ -792,7 +946,6 @@ async function handleBatchMove() {
     const targetTagId = result.tagId;
 
     // 【R5 防御】检查目标标签是否存在
-    // 同 handleCardCopyToTag 的 R4 防御说明。
     const targetTag = vault.tags.find(function (tag) {
         return tag.id === targetTagId;
     });
@@ -858,7 +1011,7 @@ async function handleBatchMove() {
     }
 
     // ---------- 分支 b：执行移动 ----------
-    // 【N9 修复】先清空选中（不触发渲染），再 dispatch（触发一次渲染）
+    // 先清空选中（不触发渲染），再 dispatch（触发一次渲染）
     clearStatementSelection(false);
 
     dispatch('batchMoveStatements', {
@@ -893,19 +1046,6 @@ async function handleBatchMove() {
  * 添加语句到底部输入区。
  *
  * 【M4 修复】延迟滚动的上下文校验扩展为四元组。
- *
- * 背景：
- *   clearAddBarInput 之后通过 setTimeout(ADD_STATEMENT_SCROLL_DELAY_MS)
- *   延迟调用 scrollMainListToBottom。这 50ms 内用户可能已经：
- *     - 切换到其他标签
- *     - 从本地搜索切到全局搜索
- *     - 输入了搜索关键词
- *     - 切换了正则模式
- *   此时若无条件滚动到底部，会让用户感到"切换标签后列表莫名跳到底部"。
- *
- * 修复：
- *   记录添加时的 (tagId, searchScope, searchKeyword, useRegex) 四元组，
- *   在 setTimeout 回调中校验当前状态是否与之一致，不一致则跳过滚动。
  *
  * 【P1-N2 修复】使用 dispatch 返回值判断命令是否真的执行。
  */
@@ -963,46 +1103,21 @@ function handleAddStatement(text) {
 /**
  * 导出完整工作区为 JSON 文件。
  *
- * 【P3-N4 修复】延迟释放 ObjectURL。
+ * 【P3-N4 + W2 + N1 修复】延迟释放 ObjectURL、挂载到 DOM、
+ * 使用屏幕外绝对定位（非 display: none）。
  *
- * 部分浏览器（尤其 Safari）在 click() 后下载流程是异步启动的，
- * 立即 revoke 可能中断下载。延迟 1 秒释放足以覆盖绝大多数浏览器的
- * 下载启动时间，同时避免内存泄漏。
- *
- * 【W2 修复】将 downloadLink 挂载到 DOM 后再 click()。
- *
- * 背景：
- *   Chrome / Firefox 允许对未挂载到 DOM 的 <a> 元素调用 click()
- *   触发下载，但 Safari 的部分版本（特别是旧版）要求元素必须在
- *   文档树中，否则 click 不会启动下载。
- *
- *   修复：把 downloadLink 添加到 document.body 后再 click()，
- *         click() 完成后立即从 DOM 移除（不在 DOM 中留下垃圾节点）。
- *
- * 【N1 修复（本轮）】用屏幕外定位替代 display: none。
- *
- * 问题分析：
- *   部分 Safari 版本（15 之前）会检查下载元素是否"renderable"。
- *   display: none 的元素被判定为不可渲染，即使挂载到 DOM 树中，
- *   也会跳过下载调度。
- *
- *   这与 W2 的初衷（让元素在 DOM 树中）看似矛盾——实际上：
- *     · W2 修复的是"元素不在 DOM 树中"这一层问题
- *     · N1 修复的是"元素在 DOM 树中但不可渲染"这更深一层的问题
- *
- *   修复方案：
- *     使用屏幕外绝对定位（position: absolute; left: -9999px）。
- *     这样元素：
- *       · 在 DOM 树中 ✅（满足 W2）
- *       · 有布局且可渲染 ✅（满足 N1）
- *       · 不可见 ✅（不干扰用户视觉）
+ * 【C3 修复】补全导出字段。
+ *   exportData 现完整包含 tags / statementsMap / recycleBin /
+ *   uiState / settings 五个字段，与 Vault 顶层结构一一对应。
  */
 async function handleExport() {
     const vault = getVaultSnapshot();
     const exportData = {
         tags: vault.tags,
         statementsMap: vault.statementsMap,
+        recycleBin: vault.recycleBin,
         uiState: vault.uiState,
+        settings: vault.settings,
         version: '7.0.0',
         exportDate: new Date().toISOString()
     };
@@ -1022,8 +1137,7 @@ async function handleExport() {
         + '_tags' + vault.tags.length
         + '_items' + totalStatements + '.json';
 
-    // 【W2 + N1 修复】挂载到 DOM 且保持可渲染（屏幕外定位）
-    // 不再使用 display: none，避免部分 Safari 版本跳过下载调度
+    // 挂载到 DOM 且保持可渲染（屏幕外定位）
     downloadLink.style.position = 'absolute';
     downloadLink.style.left = '-9999px';
     downloadLink.style.top = '0';
@@ -1037,7 +1151,7 @@ async function handleExport() {
     // 立即从 DOM 移除（click 已同步触发下载启动）
     document.body.removeChild(downloadLink);
 
-    // 延迟释放 ObjectURL，确保下载已启动（P3-N4 修复）
+    // 延迟释放 ObjectURL，确保下载已启动
     setTimeout(function () {
         URL.revokeObjectURL(objectUrl);
     }, 1000);
@@ -1081,8 +1195,7 @@ async function handleImport(file) {
         }
     };
 
-    // 【R3 修复】处理文件读取失败（例如文件被删除、磁盘错误、
-    // 权限不足等），避免用户看不到任何提示。
+    // 【R3 修复】处理文件读取失败
     reader.onerror = function (readErrorEvent) {
         console.error('[main] FileReader 读取失败:', readErrorEvent);
         showMessage('读取文件失败，请重试', true);
@@ -1147,14 +1260,15 @@ async function handleLegacyImport(parsedArray) {
  *   归一化步骤包入 try 块，异常时提前返回，
  *   不改变当前选中状态与 Vault。
  *
- *   导入成功后显式更新批量栏，确保 UI 状态与数据强一致。
+ * 【C3 / C4 修复】
+ *   C3：从 parsedData 读取 recycleBin 与 settings 并传给
+ *       normalizeVault，避免导入后回收站与用户偏好丢失。
+ *   C4：replaceVault 的切片列表补 'recycleBin'，
+ *       使更多菜单徽章计数随新数据同步刷新。
  *
- * 归一化会执行以下清理：
- *   - 丢弃 id / name 为空的非法标签
- *   - 丢弃无主标签（引用了不存在的 tagId）的语句
- *   - 丢弃 id / text 为空的非法语句
- *   - 丢弃同 id 重复语句（保留第一条）
- *   - 丢弃非法颜色（回退为 null）
+ * 【第一批重构】
+ *   subscribe('ui') 中已增加 syncSidebarExpandedState，
+ *   无需在此处额外处理侧边栏展开状态。
  *
  * @param {Object} parsedData
  */
@@ -1184,7 +1298,9 @@ async function handleFullImport(parsedData) {
         normalizedVault = ensureDefaultTagExists(normalizeVault({
             tags: parsedData.tags,
             statementsMap: parsedData.statementsMap,
-            uiState: parsedData.uiState
+            recycleBin: parsedData.recycleBin,
+            uiState: parsedData.uiState,
+            settings: parsedData.settings
         }));
     } catch (normalizeError) {
         console.error('[main] 归一化导入数据失败:', normalizeError);
@@ -1198,8 +1314,6 @@ async function handleFullImport(parsedData) {
         normalizedStatementCount += normalizedVault.statementsMap[tagId].length;
     }
 
-    // 归一化可能补入默认标签，因此 droppedTagCount 取 max(0, ...)，
-    // 避免"标签数不减反增"时给出负数提示
     const droppedTagCount = Math.max(
         0,
         originalTagCount - normalizedVault.tags.length
@@ -1212,8 +1326,8 @@ async function handleFullImport(parsedData) {
     // 先清空选中（不触发重渲染，避免与 replaceVault 的重渲染竞争）
     clearStatementSelection(false);
 
-    // 整块替换：replaceVault 内部会通知三个 slice
-    replaceVault(normalizedVault, ['tags', 'statements', 'ui']);
+    // 整块替换：切片列表补 'recycleBin'
+    replaceVault(normalizedVault, ['tags', 'statements', 'ui', 'recycleBin']);
 
     // 显式更新批量栏，确保 UI 状态与数据强一致
     updateBatchBar({
@@ -1224,6 +1338,11 @@ async function handleFullImport(parsedData) {
     // ---------- 结果提示 ----------
     let message = '导入成功：' + normalizedVault.tags.length
         + ' 个标签，' + normalizedStatementCount + ' 条语句';
+
+    // 提示回收站条目数（若有）
+    if (normalizedVault.recycleBin.length > 0) {
+        message += '，回收站 ' + normalizedVault.recycleBin.length + ' 条';
+    }
 
     if (droppedTagCount > 0 || droppedStatementCount > 0) {
         const dropParts = [];
@@ -1239,6 +1358,16 @@ async function handleFullImport(parsedData) {
     showMessage(message);
 }
 
+/**
+ * 重置全局
+ *
+ * 【C4 修复】replaceVault 的切片列表补 'recycleBin'，
+ *   使更多菜单徽章计数与重置后的空回收站同步刷新。
+ *
+ * 【第一批重构】
+ *   subscribe('ui') 中已增加 syncSidebarExpandedState，
+ *   无需在此处额外处理侧边栏展开状态。
+ */
 async function handleReset() {
     const confirmed = await showConfirmDialog(
         '重置全局会丢失所有自定义数据，恢复为内置语料库。确定吗？'
@@ -1251,7 +1380,8 @@ async function handleReset() {
 
     clearStatementSelection(false);
 
-    replaceVault(presetVault, ['tags', 'statements', 'ui']);
+    // 切片列表补 'recycleBin'
+    replaceVault(presetVault, ['tags', 'statements', 'ui', 'recycleBin']);
 
     // 显式更新批量栏，确保 UI 状态与数据强一致
     updateBatchBar({
@@ -1262,113 +1392,108 @@ async function handleReset() {
     showMessage('已恢复内置语料库');
 }
 
-// ==================== 统计与滚动 ====================
-
-function computeVisibleCount() {
-    const vault = getVaultSnapshot();
-    const currentTagId = vault.uiState.currentTagId;
-    const isGlobalMode = vault.uiState.searchScope === SEARCH_SCOPE_GLOBAL;
-    const keyword = vault.uiState.searchKeyword;
-    const useRegex = vault.uiState.useRegex;
-
-    if (isGlobalMode) {
-        const all = getAllStatementsWithTags(vault);
-        if (!keyword) return all.length;
-        return all.filter(function (statement) {
-            return matchSearch(statement.text, keyword, useRegex);
-        }).length;
-    }
-
-    const localList = vault.statementsMap[currentTagId] || [];
-    if (!keyword) return localList.length;
-    return localList.filter(function (statement) {
-        return matchSearch(statement.text, keyword, useRegex);
-    }).length;
-}
+// ==================== 更多菜单 / 设置 / 回收站 ====================
 
 /**
- * 绑定侧边栏滚动保存 + beforeunload 兜底
- * 主列表滚动保存已内聚到 statement-list.js，此处不再处理
+ * 打开回收站面板
+ *
+ * 流程：
+ *   1. 先 dispatch 清理过期条目（幂等：无过期时 Facade 会返回 false）
+ *   2. 打开面板，传入最新数据拉取器与 handlers
  */
-function bindSidebarScrollMemory() {
-    const sidebarTagsElement = document.getElementById('sidebarTagsList');
-    let scrollSaveTimer = null;
+async function handleOpenRecycleBin() {
+    // 1. 清理过期条目
+    //    幂等命令：若无过期条目，Facade 会返回 false，静默无副作用
+    dispatch('cleanupExpiredRecycleBinItems', {});
 
-    function saveSidebarScroll() {
-        if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-        scrollSaveTimer = setTimeout(function () {
-            if (sidebarTagsElement) {
-                try {
-                    sessionStorage.setItem(
-                        SESSION_KEY_SIDEBAR_SCROLL_POSITION,
-                        String(sidebarTagsElement.scrollTop)
-                    );
-                } catch (storageError) {
-                    console.warn('[main] sessionStorage 写入失败:', storageError);
-                }
-            }
-        }, SCROLL_SAVE_DEBOUNCE_MS);
-    }
-
-    if (sidebarTagsElement) {
-        sidebarTagsElement.addEventListener('scroll', saveSidebarScroll, { passive: true });
-    }
-
-    window.addEventListener('beforeunload', function () {
-        if (sidebarTagsElement) {
-            try {
-                sessionStorage.setItem(
-                    SESSION_KEY_SIDEBAR_SCROLL_POSITION,
-                    String(sidebarTagsElement.scrollTop)
-                );
-            } catch (storageError) {
-                // 忽略 beforeunload 期间的存储异常
-            }
+    // 2. 打开面板
+    await openRecycleBinModal({
+        getItems: function () {
+            const vault = getVaultSnapshot();
+            return (vault && Array.isArray(vault.recycleBin))
+                ? vault.recycleBin
+                : [];
+        },
+        handlers: {
+            onRestoreSingle: handleRecycleRestoreSingle,
+            onRestoreBatch: handleRecycleRestoreBatch,
+            onPurgeSingle: handleRecyclePurgeSingle,
+            onPurgeBatch: handleRecyclePurgeBatch,
+            onClearAll: handleRecycleClearAll
         }
-        // 主列表滚动位置
-        flushScrollPosition();
-        // 防抖持久化
-        flushDebouncedPersist();
     });
 }
 
 /**
- * 恢复侧边栏滚动位置
- * 主列表滚动位置由 statement-list.js 在首次渲染时自动恢复
+ * 更多菜单 → 快捷键帮助
  *
- * 【R1 修复】sessionStorage.getItem 包裹 try/catch。
- *
- * 在极端的浏览器策略环境下（例如企业策略禁用 sessionStorage），
- * getItem 会抛出 SecurityError。此前会导致 bootstrap() 失败、
- * 应用启动失败。现改为：读取失败时静默跳过恢复，
- * 使用默认滚动位置（顶部）。
+ * 【设计说明】
+ *   项目当前未提供独立的"快捷键帮助"模态框（避免为单一功能引入新组件）。
+ *   这里使用 Toast 呈现简短提示，用户如需完整列表可查阅 README。
  */
-function restoreSidebarScrollState() {
-    const sidebarTagsElement = document.getElementById('sidebarTagsList');
-    if (!sidebarTagsElement) return;
-
-    try {
-        const savedSidebarScroll = sessionStorage.getItem(
-            SESSION_KEY_SIDEBAR_SCROLL_POSITION
-        );
-        if (savedSidebarScroll === null) return;
-        const parsed = parseFloat(savedSidebarScroll);
-        if (!Number.isNaN(parsed)) {
-            sidebarTagsElement.scrollTop = parsed;
-        }
-    } catch (storageError) {
-        // 读取失败时静默跳过，不影响应用启动
-        console.warn('[main] sessionStorage 读取失败:', storageError);
-    }
+function handleOpenShortcutsHelp() {
+    showMessage(
+        '快捷键：Ctrl+K 搜索 · Ctrl+/ 新建 · Esc 关闭 · Delete 删除选中'
+    );
 }
 
-// ==================== 启动 ====================
-
-bootstrap().catch(function (bootstrapError) {
-    console.error('[main] 启动失败:', bootstrapError);
-    try {
-        showMessage('应用启动失败，请刷新页面重试', true);
-    } catch (toastError) {
-        alert('应用启动失败，请刷新页面重试');
+/**
+ * 更多菜单 → 设置
+ *
+ * 【C2 修复】将设置面板接线到 UI 入口。
+ *
+ * 每次打开设置面板时从 getVaultSnapshot() 重新读取最新的
+ * vault.settings，确保面板内显示的开关状态与数据强一致。
+ *
+ * 开关切换后，若 dispatch 被拒（settings.js 中的 onToggle 返回 false），
+ * 由 settings.js 内部回滚视觉状态。本函数不处理回滚逻辑。
+ *
+ * @returns {Promise<void>} 面板关闭时 resolve
+ */
+async function handleOpenSettings() {
+    const vault = getVaultSnapshot();
+    if (!vault || !vault.settings) {
+        // 理论上不会发生（normalizeVault 保证 settings 存在），
+        // 但作为防御性处理，给出明确反馈而非静默失败。
+        showMessage('设置加载失败：数据状态异常', true);
+        return;
     }
-});
+
+    await openSettingsModal({
+        settings: vault.settings,
+        onToggle: handleSettingsToggle
+    });
+}
+
+/**
+ * 更多菜单 → 关于
+ *
+ * 【设计说明】
+ *   同 handleOpenShortcutsHelp：使用 Toast 呈现简短的版本信息。
+ */
+function handleOpenAbout() {
+    showMessage(
+        'DeepSeek 语句工坊 · 命令-查询分离架构 · AES-256-GCM 加密 · 本地存储'
+    );
+}
+
+/**
+ * 设置面板 → 切换某个设置项
+ *
+ * 【返回值语义】
+ *   返回 true  = 命令实际执行（或已是目标值，视觉状态无需回滚）；
+ *   返回 false = 命令被拒且真实值未变化，UI 应回滚。
+ *
+ * settings.js 中的开关根据此返回值决定是否回滚视觉状态。
+ *
+ * 【M3 修复】
+ *   dispatch 返回 false 可能是"幂等"（值未变化，实际上已成功）
+ *   或"命令被拒"（校验失败）。原实现直接把 false 透传给
+ *   settings.js，导致在幂等情况（用户点击一个与当前值相同的开关）
+ *   下错误回滚视觉状态，呈现"点击无效"的观感。
+ *
+ *   现通过读取最新 vault.settings 判定：若最新值已等于目标值，
+ *   说明是幂等而非失败，返回 true（不回滚）。
+ *
+ * @param {string} key 设置项键名
+ * @param

@@ -4,14 +4,35 @@
 // 包含：批量删除 / 批量移动 / 复制到指定标签 / 复制到默认标签 /
 //       标签内排序 / 累加复制计数
 // 全部为纯函数
+//
+// 【方案 A（上一轮）】
+//   batchDeleteStatements 改为**软删除**：
+//     - 批量从 statementsMap 中移除
+//     - 批量追加到 recycleBin（使用同一个 deletedAt 时间戳，
+//       保证批量删除的条目在回收站中连续显示）
+//     - 所有条目都记录来源标签快照
+//     - 统一截断到 MAX_RECYCLE_BIN_SIZE
+//
+// 【本轮深度审核（第二批）】
+//   本模块无需逻辑修改。
 // ========================================================================
 
 import { generateUniqueId } from '../utils/id.js';
-import { DEFAULT_TAG_ID, MAX_COPY_COUNT } from '../constants.js';
+import {
+    DEFAULT_TAG_ID,
+    MAX_COPY_COUNT,
+    MAX_RECYCLE_BIN_SIZE,
+    PRESET_COLORS
+} from '../constants.js';
 import { isDuplicateInTag } from '../core/vault.js';
 
 /**
- * 批量删除语句（跨标签扫描）
+ * 批量删除语句（软删除，跨标签扫描）
+ *
+ * 时间戳策略：
+ *   所有条目使用同一个 `deletedAt`（同一批次），
+ *   保证它们在回收站中时间一致、按 id 字典序稳定排序。
+ *
  * @param {Object} vault
  * @param {{ statementIds: string[] }} payload
  * @returns {Object} 新 Vault
@@ -21,21 +42,56 @@ export function batchDeleteStatements(vault, payload) {
     if (idsToDelete.size === 0) return vault;
 
     const newStatementsMap = {};
-    let changed = false;
+    const deletedItems = [];
+    let anyChanged = false;
+    const deletionTimestamp = Date.now();
+
     for (const tagId of Object.keys(vault.statementsMap)) {
-        const original = vault.statementsMap[tagId];
-        const filtered = original.filter(function (statement) {
-            return !idsToDelete.has(statement.id);
+        const originalList = vault.statementsMap[tagId];
+        const filteredList = [];
+        const sourceTag = vault.tags.find(function (tag) {
+            return tag.id === tagId;
         });
-        if (filtered.length !== original.length) changed = true;
-        newStatementsMap[tagId] = filtered;
+        const sourceTagColor = (sourceTag && PRESET_COLORS.includes(sourceTag.color))
+            ? sourceTag.color
+            : null;
+
+        for (const statement of originalList) {
+            if (idsToDelete.has(statement.id)) {
+                deletedItems.push({
+                    id: statement.id,
+                    text: statement.text,
+                    copyCount: typeof statement.copyCount === 'number'
+                        ? statement.copyCount
+                        : 0,
+                    sourceTagId: tagId,
+                    sourceTagName: sourceTag ? sourceTag.name : '',
+                    sourceTagColor: sourceTagColor,
+                    deletedAt: deletionTimestamp,
+                    deletionSource: 'batch'
+                });
+            } else {
+                filteredList.push(statement);
+            }
+        }
+
+        if (filteredList.length !== originalList.length) {
+            anyChanged = true;
+        }
+        newStatementsMap[tagId] = filteredList;
     }
-    if (!changed) return vault;
+
+    if (!anyChanged) return vault;
+
+    const newRecycleBin = [...deletedItems, ...vault.recycleBin]
+        .slice(0, MAX_RECYCLE_BIN_SIZE);
 
     return {
         tags: vault.tags,
+        statementsMap: newStatementsMap,
+        recycleBin: newRecycleBin,
         uiState: vault.uiState,
-        statementsMap: newStatementsMap
+        settings: vault.settings
     };
 }
 
@@ -117,8 +173,10 @@ export function batchMoveStatements(vault, payload) {
 
     return {
         tags: vault.tags,
+        statementsMap: newStatementsMap,
+        recycleBin: vault.recycleBin,
         uiState: vault.uiState,
-        statementsMap: newStatementsMap
+        settings: vault.settings
     };
 }
 
@@ -143,11 +201,13 @@ export function copyStatementToTag(vault, payload) {
 
     return {
         tags: vault.tags,
-        uiState: vault.uiState,
         statementsMap: {
             ...vault.statementsMap,
             [targetTagId]: [...vault.statementsMap[targetTagId], newStatement]
-        }
+        },
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
@@ -186,11 +246,13 @@ export function reorderStatementsInTag(vault, payload) {
 
     return {
         tags: vault.tags,
-        uiState: vault.uiState,
         statementsMap: {
             ...vault.statementsMap,
             [tagId]: list
-        }
+        },
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
@@ -223,11 +285,13 @@ export function incrementCopyCount(vault, payload) {
             };
             return {
                 tags: vault.tags,
-                uiState: vault.uiState,
                 statementsMap: {
                     ...vault.statementsMap,
                     [tagId]: newList
-                }
+                },
+                recycleBin: vault.recycleBin,
+                uiState: vault.uiState,
+                settings: vault.settings
             };
         }
     }

@@ -3,20 +3,17 @@
 // DeepSeek 语句工坊 · 标签增 / 改 / 删 / 排序
 // 全部为纯函数
 //
-// 【本次改进 · N6 修复】
+// 【历史修复 · N6】
 //   addTag / editTag 增加"标签名长度上限"校验。
 //
-//   背景：
-//     UI 层（views/modals/tag.js）通过 <input maxlength="20">
-//     限制用户输入，但命令层此前没有任何防御。
+// 【方案 A（上一轮）】
+//   所有函数的返回对象补齐 recycleBin 和 settings 字段。
+//   原因：vault 的顶层结构完整性必须由每个命令维护。
+//   虽然这些命令本身不修改 recycleBin / settings，
+//   但若返回对象缺失这两个字段，Facade 后续操作会读取到 undefined。
 //
-//   风险：
-//     若未来出现其他调用路径（如导入、自动化脚本、控制台调试）
-//     绕过 UI 层，可能写入超长名称，导致侧边栏渲染时撑破布局。
-//
-//   修复：
-//     命令层使用 MAX_TAG_NAME_LENGTH 常量做兜底校验，
-//     与 UI 层的 maxlength 属性保持一致。
+// 【本轮深度审核（第二批）】
+//   本模块无需逻辑修改。
 // ========================================================================
 
 import { generateUniqueId } from '../utils/id.js';
@@ -61,7 +58,9 @@ export function addTag(vault, payload) {
             ...vault.statementsMap,
             [newTag.id]: []
         },
-        uiState: vault.uiState
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
@@ -106,12 +105,21 @@ export function editTag(vault, payload) {
     return {
         tags: newTags,
         statementsMap: vault.statementsMap,
-        uiState: vault.uiState
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
 
 /**
  * 删除标签及其所有语句
+ *
+ * 【决策】删除标签**不进入回收站**：
+ *   - 删除标签的确认框已明确提示"该标签下有 N 条语句"与"此操作不可撤销"
+ *   - 一次删除几百条会立刻撑爆回收站（100 条上限），
+ *     把之前的重要误删挤出去
+ *   - 若用户想保留语句而删标签，正确做法是先"批量移动到其他标签"
+ *
  * @param {Object} vault
  * @param {{ tagId: string }} payload
  * @returns {Object} 新 Vault
@@ -135,7 +143,9 @@ export function deleteTag(vault, payload) {
     return {
         tags: newTags,
         statementsMap: newStatementsMap,
-        uiState: newUiState
+        recycleBin: vault.recycleBin,
+        uiState: newUiState,
+        settings: vault.settings
     };
 }
 
@@ -178,6 +188,8 @@ export function reorderTags(vault, payload) {
     return {
         tags: newTags,
         statementsMap: vault.statementsMap,
-        uiState: vault.uiState
+        recycleBin: vault.recycleBin,
+        uiState: vault.uiState,
+        settings: vault.settings
     };
 }
