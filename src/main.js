@@ -96,6 +96,87 @@
 //     为什么不改用 console.debug：
 //       console.debug 在 Chrome DevTools 默认过滤级别下不显示，
 //       会让开发者错过诊断信息。用"首次 warn"策略兼顾两者。
+//
+// 【第三批重构（历史）】
+//   问题 · computeVisibleCount 缺失（阻塞级）：
+//     症状：
+//       运行时报 ReferenceError: computeVisibleCount is not defined
+//       位置：renderAll → updateHeaderStats(computeVisibleCount())
+//       后果：bootstrap 阶段的首次 renderAll 即抛错，
+//             应用卡在"已加载但未初始化"状态，用户看到"应用启动失败"。
+//
+//     根因：
+//       computeVisibleCount 曾被定义于本文件，但在某次编辑中丢失。
+//       同时保留的 import { matchSearch } from './commands/search.js'
+//       成为死引用（未使用），这是编辑事故的间接证据。
+//
+//     深层问题：
+//       本文件中 computeVisibleCount 的职责（"计算当前可见语句数"）
+//       与 views/statement-list.js 中 renderStatementList 里的可见集
+//       计算逻辑完全重叠，历史上是两处独立实现。这种双实现结构
+//       天然脆弱，本次丢失事件正是这种脆弱性的实证。
+//
+//     修复策略：
+//       1. 立即补回 computeVisibleCount 函数（本文件的直接改动）。
+//       2. 把可见集计算逻辑收敛为单一真相源：
+//          新增 commands/search.js 的 computeVisibleStatements(vault)
+//          纯函数，本文件与 statement-list.js 共享同一实现，
+//          从结构上消除漂移可能。
+//       3. import 层同步：
+//          移除死引用 matchSearch（未使用）；
+//          新增 computeVisibleStatements。
+//       4. computeVisibleCount 内部实现改为：
+//          委托 computeVisibleStatements(vault).statements.length，
+//          避免本文件再次成为独立的可见集算法副本。
+//
+//     兼容性保证：
+//       · 对外导出 API 完全不变（main.js 本身无对外导出）
+//       · 顶栏统计徽章的显示语义完全不变（数字 = 可见语句数）
+//       · 所有订阅 / 派发 / 事件处理逻辑逐行保留
+//
+// 【第四批重构（本轮）】
+//   问题 · 编辑事故遗留的两个死引用（源码卫生）：
+//
+//     症状 1：import { isDuplicateInTag } from './core/vault.js';
+//       全文搜索本文件，无任何 `isDuplicateInTag(...)` 调用。
+//       所有重复检查均以内联 `.some(...)` 实现：
+//         · handleCardEdit    → vault.statementsMap[found.tagId].some(...)
+//         · handleCardCopyToTag → vault.statementsMap[targetTagId].some(...)
+//         · handleCardCopyToDefault → vault.statementsMap[DEFAULT_TAG_ID].some(...)
+//         · handleAddStatement → vault.statementsMap[currentTagId].some(...)
+//
+//     症状 2：import { SEARCH_SCOPE_GLOBAL } from './constants.js';
+//       全文搜索本文件，无任何 `SEARCH_SCOPE_GLOBAL` 使用。
+//       所有 scope 判断均直接读取 `vault.uiState.searchScope` 的值：
+//         · handleAddStatement → latestVault.uiState.searchScope
+//
+//     根因（与上一轮 matchSearch 死引用同源）：
+//       编辑中途改变了实现路径，忘记同步清理 import。
+//       起初打算：
+//         · 用 isDuplicateInTag 工具函数做重复检查 → 改成内联 `.some(...)`
+//         · 用 SEARCH_SCOPE_GLOBAL 常量做比较  → 改成"值即真相"直接比对
+//       但保留的 import 未被同步移除。
+//
+//     为什么不"留着也无害"：
+//       · 可维护性下降：未来维护者看到 import 会误以为本文件用了工具
+//         函数，读代码时在内联实现处会困惑"为什么不用工具函数"。
+//       · 隐式契约腐化：保留 SEARCH_SCOPE_GLOBAL 导入但用字面量比较，
+//         暗示"存在两种 scope 处理方式"，诱导未来的不一致写法。
+//       · 同类问题已在 utils/dom.js（delegate / $$）、search-bar.js
+//         （getSearchInputValue）、more-menu.js（escapeHtml）、
+//         settings.js（escapeHtml）等模块分别清理过，本文件是收尾。
+//
+//     修复策略：
+//       · 移除 import 段中的 isDuplicateInTag
+//       · 移除 import 段中的 SEARCH_SCOPE_GLOBAL
+//       · 内联 `.some(...)` 检查全部 1:1 保留（不改为工具函数调用，
+//         避免改变代码路径、违反"不得删除/降级/弱化现有功能"约束）
+//       · vault.uiState.searchScope 的值比较全部 1:1 保留
+//
+//     兼容性保证：
+//       · 删除的 import 从未被调用，运行时行为 100% 不变
+//       · 所有函数体、常量、日志、错误处理 1:1 保留
+//       · main.js 本身无对外导出，本改动不影响任何其他模块
 // ========================================================================
 
 import {
@@ -111,7 +192,6 @@ import { isCryptoAvailable } from './core/crypto.js';
 import { registerAllCommands } from './commands/index.js';
 import {
     DEFAULT_TAG_ID,
-    SEARCH_SCOPE_GLOBAL,
     SESSION_KEY_SIDEBAR_SCROLL_POSITION,
     SCROLL_SAVE_DEBOUNCE_MS,
     ADD_STATEMENT_SCROLL_DELAY_MS,
@@ -123,10 +203,12 @@ import {
     findStatementById,
     getAllStatementsWithTags,
     normalizeVault,
-    ensureDefaultTagExists,
-    isDuplicateInTag
+    ensureDefaultTagExists
 } from './core/vault.js';
-import { matchSearch } from './commands/search.js';
+// 可见集单一真相源：
+//   · computeVisibleStatements —— 与 statement-list.js 共享同一实现
+//   （matchSearch 已在本模块的可见集重构中移除——本文件不再直接做匹配）
+import { computeVisibleStatements } from './commands/search.js';
 
 import { initializeToast, showMessage } from './views/toast.js';
 import { showConfirmDialog } from './views/modals/confirm.js';
@@ -434,6 +516,52 @@ function initializeAllViews() {
         if (!vault || !Array.isArray(vault.recycleBin)) return;
         updateMoreMenuBadge(vault.recycleBin.length);
     });
+}
+
+// ==================== 可见集统计（单一真相源） ====================
+
+/**
+ * 计算当前可见语句数量。
+ *
+ * 【第三批重构 · 可见集单一真相源】
+ *   本函数不再独立实现可见集算法，而是委托给
+ *   commands/search.js 的 computeVisibleStatements(vault)。
+ *
+ *   历史背景：
+ *     此前本函数与 views/statement-list.js 的 renderStatementList
+ *     各自实现了一遍可见集计算逻辑。这种双实现结构天然脆弱：
+ *     任一处逻辑变更未同步，就会出现"列表显示 10 条、徽章写着 15 条"
+ *     的用户可见 bug。
+ *
+ *     本次重构把可见集计算收敛为单一真相源，本函数只做一层
+ *   "取 .statements.length" 的适配，从结构上消除漂移可能。
+ *
+ * 【与 statement-list.js 的契约】
+ *   本函数返回的数字与 renderStatementList 渲染出的卡片数严格相等。
+ *   两者都从 computeVisibleStatements(vault) 获取 statements 数组，
+ *   天然一致。
+ *
+ * 【调用时机】
+ *   订阅 'statements' 与 'ui' 切片时各调用一次（每次 dispatch 后）。
+ *   单次调用为 O(可见语句数)，与 renderStatementList 一致；
+ *   典型规模（数千条以内）单次 < 5ms，无需跨调用缓存。
+ *
+ * 【防御性】
+ *   computeVisibleStatements 内部已对 vault / uiState / settings
+ *   缺失做防御；本函数在其返回结果上再取 .length，
+ *   即使传入 null 也安全（返回 0）。
+ *
+ * @returns {number}
+ */
+function computeVisibleCount() {
+    const vault = getVaultSnapshot();
+    if (!vault) return 0;
+
+    const visibleResult = computeVisibleStatements(vault);
+    if (!visibleResult || !Array.isArray(visibleResult.statements)) {
+        return 0;
+    }
+    return visibleResult.statements.length;
 }
 
 function renderAll() {

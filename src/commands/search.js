@@ -61,14 +61,43 @@
 //
 //   若未来业务扩展为多语言语料库，需重新评估此处的处理策略。
 //
+// 【本轮重构（第二批 · 可见集单一真相源）】
+//   新增 computeVisibleStatements(vault) 纯函数。
+//
+//   背景：
+//     "计算当前可见语句列表"这一职责，此前由两处独立实现：
+//       · src/views/statement-list.js 的 renderStatementList（内联逻辑）
+//       · src/main.js 的 computeVisibleCount（独立实现）
+//     这种双实现结构天然脆弱：任一处逻辑变更未同步，
+//     就会出现"列表显示 10 条、徽章写着 15 条"的用户可见 bug。
+//
+//   重构策略：
+//     把可见集计算收敛为单一真相源，两处调用方共享同一函数，
+//     从结构上消除漂移可能。
+//
+//   函数位置选择：
+//     · commands/search.js 已是搜索/过滤相关的纯函数模块
+//     · 主题聚合（过滤、排序、可见集）便于统一维护
+//     · 不依赖 UI/DOM/存储，符合 commands 层纯函数约定
+//
+//   返回形态：
+//     返回 { statements, isGlobalMode, currentTagId, keyword,
+//            useRegex, enableInitialsSearch } 的完整上下文，
+//     让调用方无需二次读取 vault.uiState，减少"渲染时状态已变"
+//     的边界问题。
+//
 // 【历史版本】
 //   - 第二批深度审核：本模块无需逻辑修改。
-//   - 本次重构：补充问题 G 的边界说明。
+//   - 本次重构：补充问题 G 的边界说明；新增可见集单一真相源函数。
 // ========================================================================
 
 import { escapeHtml } from '../utils/dom.js';
 import { mapTextToInitials } from '../utils/pinyin.js';
-import { MAX_REGEX_KEYWORD_LENGTH } from '../constants.js';
+import {
+    DEFAULT_TAG_ID,
+    SEARCH_SCOPE_GLOBAL,
+    MAX_REGEX_KEYWORD_LENGTH
+} from '../constants.js';
 
 // ==================== 首字母映射缓存 ====================
 // 以语句文本为 key。同一文本永远对应同一映射，
@@ -708,4 +737,213 @@ export function highlightText(text, keyword, useRegex, enableInitialsSearch) {
     } catch (highlightError) {
         return escapeHtml(stringText);
     }
+}
+
+// ==================== 可见集计算（单一真相源） ====================
+
+/**
+ * 计算当前可见的语句列表（含渲染所需元数据）。
+ *
+ * 【为什么要有这个函数】
+ *   statement-list.js 与 main.js 都需要知道"在当前上下文下，
+ *   哪些语句是可见的"：
+ *     · statement-list.js → 渲染卡片列表
+ *     · main.js           → 计算顶栏统计徽章的数字
+ *
+ *   历史上这两处各自独立实现了一遍可见集计算逻辑，导致：
+ *     · 逻辑漂移风险高：任一处改动若未同步，会造成"列表显示 10 条
+ *       但徽章写着 15 条"的用户可见 bug
+ *     · 维护成本翻倍：搜索语义变更需要在两处同时修改
+ *
+ *   本函数把可见集计算收敛为单一真相源，两处调用方共享同一逻辑，
+ *   从结构上消除漂移可能。
+ *
+ * 【可见集定义（依赖 vault.uiState + vault.settings）】
+ *   上下文参数：
+ *     · currentTagId          → 当前标签 ID（本地模式用）
+ *     · searchScope           → 'local' | 'global'
+ *     · searchKeyword         → 搜索关键词
+ *     · useRegex              → 是否正则模式
+ *     · enableInitialsSearch  → 首字母搜索开关（来自 settings）
+ *
+ *   计算规则：
+ *     全局模式：
+ *       1. 扁平化所有标签的语句
+ *       2. 每条语句附加 tagId / tagName / tagColor（供卡片标签展示）
+ *       3. 若有关键词 → filterStatements 过滤
+ *       4. 无关键词   → 直接返回全部（保持标签顺序，不排序）
+ *
+ *     本地模式：
+ *       1. 取当前标签的语句
+ *       2. 有关键词   → filterStatements 过滤
+ *       3. 无关键词且是默认标签 → sortByCopyCount 排序
+ *       4. 无关键词且非默认标签 → 保持原顺序（slice 浅拷贝）
+ *
+ * 【返回值语义】
+ *   {
+ *     statements:           Array,    // 可见语句列表
+ *     isGlobalMode:         boolean,  // 是否全局模式
+ *     currentTagId:         string,   // 当前标签 ID
+ *     keyword:              string,   // 搜索关键词（原文，未 trim）
+ *     useRegex:             boolean,  // 是否正则
+ *     enableInitialsSearch: boolean   // 首字母搜索开关
+ *   }
+ *
+ *   返回全部上下文参数，方便调用方在渲染时无需再读 vault.uiState，
+ *   减少"渲染时状态已变"的边界问题。
+ *
+ * 【纯函数保证】
+ *   不修改入参 vault；返回的 statements 是一个全新数组
+ *   （filterStatements / sortByCopyCount / slice 均返回新数组）。
+ *
+ * 【防御性读取】
+ *   本函数是公共 API，允许 vault / uiState / settings 为 null/undefined，
+ *   此时按"最保守的合法默认值"处理：
+ *     · vault 为空         → 返回空可见集
+ *     · uiState 为空       → 按本地模式、无关键词、无正则处理
+ *     · settings 为空      → 首字母搜索开关取 false（保守）
+ *
+ * 【性能说明】
+ *   单次调用为 O(可见语句数)。
+ *   renderStatementList 与 computeVisibleCount 在同一次 dispatch 中
+ *   会各自调用一次本函数（共两次）。考虑到：
+ *     · 每次调用都是 O(N)，N = 当前上下文下的语句数
+ *     · 典型规模（数千条以内）单次 < 5ms
+ *   不做跨调用缓存，避免引入缓存失效的复杂性。
+ *
+ * @param {Object} vault
+ * @returns {{
+ *   statements: Array,
+ *   isGlobalMode: boolean,
+ *   currentTagId: string,
+ *   keyword: string,
+ *   useRegex: boolean,
+ *   enableInitialsSearch: boolean
+ * }}
+ */
+export function computeVisibleStatements(vault) {
+    // ---------- 防御性校验：vault 整体合法性 ----------
+    if (!vault || typeof vault !== 'object') {
+        return {
+            statements: [],
+            isGlobalMode: false,
+            currentTagId: DEFAULT_TAG_ID,
+            keyword: '',
+            useRegex: false,
+            enableInitialsSearch: false
+        };
+    }
+
+    // ---------- 上下文参数提取 ----------
+    const uiState = (vault.uiState && typeof vault.uiState === 'object')
+        ? vault.uiState
+        : {};
+
+    const currentTagId = (uiState.currentTagId != null)
+        ? String(uiState.currentTagId)
+        : DEFAULT_TAG_ID;
+
+    const isGlobalMode = uiState.searchScope === SEARCH_SCOPE_GLOBAL;
+
+    const keyword = (uiState.searchKeyword != null)
+        ? String(uiState.searchKeyword)
+        : '';
+
+    const useRegex = Boolean(uiState.useRegex);
+
+    // 防御性读取：vault.settings 理论上必定存在（normalizeVault 保证），
+    // 但作为公共 API 的防御层，此处允许 settings 为 null。
+    // 保守默认 false：宁可少一项功能，也不做未经许可的首字母回退。
+    const enableInitialsSearch = !!(
+        vault.settings
+        && typeof vault.settings === 'object'
+        && vault.settings.enableInitialsSearch
+    );
+
+    // ---------- 全局模式 ----------
+    if (isGlobalMode) {
+        const flatStatements = [];
+        const tagList = Array.isArray(vault.tags) ? vault.tags : [];
+        const statementsMap = (vault.statementsMap && typeof vault.statementsMap === 'object')
+            ? vault.statementsMap
+            : {};
+
+        for (let tagIndex = 0; tagIndex < tagList.length; tagIndex++) {
+            const tag = tagList[tagIndex];
+            if (!tag || !tag.id) continue;
+
+            const tagStatementList = Array.isArray(statementsMap[tag.id])
+                ? statementsMap[tag.id]
+                : [];
+
+            for (
+                let statementIndex = 0;
+                statementIndex < tagStatementList.length;
+                statementIndex++
+            ) {
+                const statement = tagStatementList[statementIndex];
+                if (!statement || !statement.id) continue;
+
+                // 保持与原实现一致：展开语句对象，附加标签元信息
+                flatStatements.push({
+                    ...statement,
+                    tagId: tag.id,
+                    tagName: tag.name,
+                    tagColor: tag.color
+                });
+            }
+        }
+
+        const visibleStatements = keyword
+            ? filterStatements(
+                flatStatements,
+                keyword,
+                useRegex,
+                enableInitialsSearch
+            )
+            : flatStatements;
+
+        return {
+            statements: visibleStatements,
+            isGlobalMode: true,
+            currentTagId: currentTagId,
+            keyword: keyword,
+            useRegex: useRegex,
+            enableInitialsSearch: enableInitialsSearch
+        };
+    }
+
+    // ---------- 本地模式 ----------
+    const statementsMap = (vault.statementsMap && typeof vault.statementsMap === 'object')
+        ? vault.statementsMap
+        : {};
+
+    const localStatementList = Array.isArray(statementsMap[currentTagId])
+        ? statementsMap[currentTagId]
+        : [];
+
+    let visibleStatements;
+    if (keyword) {
+        visibleStatements = filterStatements(
+            localStatementList,
+            keyword,
+            useRegex,
+            enableInitialsSearch
+        );
+    } else if (currentTagId === DEFAULT_TAG_ID) {
+        // 默认标签且无搜索：按 copyCount 降序
+        visibleStatements = sortByCopyCount(localStatementList);
+    } else {
+        // 非默认标签且无搜索：保持原始顺序
+        visibleStatements = localStatementList.slice();
+    }
+
+    return {
+        statements: visibleStatements,
+        isGlobalMode: false,
+        currentTagId: currentTagId,
+        keyword: keyword,
+        useRegex: useRegex,
+        enableInitialsSearch: enableInitialsSearch
+    };
 }

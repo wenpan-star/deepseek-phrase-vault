@@ -63,7 +63,7 @@
 //     相较逐卡片 findStatementById 的 O(N²) 整体更优。
 //     10000 条语句 ≈ 10–30ms，可接受。
 //
-// 【第二批重构（本轮）】
+// 【第二批重构（历史）】
 //   问题 J（persistCurrentScrollPosition 使用 DOM 值而非记录值）：
 //     历史实现虽然"当前所有路径都安全"，但存在隐式契约：
 //     所有标签切换路径都必须先调用 flushScrollPosition。
@@ -94,10 +94,20 @@
 //     与"没有卡片可悬停"的语义一致。同时，由于每次用 new Map()
 //     重建，旧数据自动清空，不存在陈旧命中。
 //
-// 【历史版本】
-//   - 第四批深度审核：本模块无需逻辑修改。
-//   - 第一批重构：问题 A、E 修复。
-//   - 第二批重构：问题 J、K 修复。
+// 【本轮重构（第三批 · 可见集单一真相源）】
+//   可见集计算逻辑从本模块内联抽取到 commands/search.js 的
+//   computeVisibleStatements(vault)，与 main.js 的 computeVisibleCount
+//   共享同一实现，从结构上消除"列表显示 10 条、徽章写着 15 条"
+//   的漂移风险。
+//
+//   本模块仅保留渲染相关职责：
+//     · 调用 computeVisibleStatements 获取可见集 + 上下文元数据
+//     · 根据上下文决定排序绑定、空状态、卡片模板
+//     · 管理选中状态、滚动记忆、全文浮层
+//
+//   import 精简：
+//     · 移除 filterStatements / sortByCopyCount（已不再直接调用）
+//     · 新增 computeVisibleStatements
 // ========================================================================
 
 import { $, escapeHtml } from '../utils/dom.js';
@@ -112,7 +122,10 @@ import {
     POPOVER_ARROW_OFFSET_PX,
     POPOVER_MIN_WIDTH_PX
 } from '../constants.js';
-import { filterStatements, highlightText, sortByCopyCount } from '../commands/search.js';
+import {
+    highlightText,
+    computeVisibleStatements
+} from '../commands/search.js';
 import { renderStatementCard, renderEmptyState } from './statement-card.js';
 
 let containerElement = null;
@@ -760,6 +773,12 @@ function restoreMainListScroll(vault) {
 
 /**
  * 渲染语句列表
+ *
+ * 【本轮重构 · 可见集单一真相源】
+ *   可见集计算委托给 computeVisibleStatements(vault)，
+ *   与 main.js 的 computeVisibleCount 使用同一实现，
+ *   从结构上消除两处逻辑漂移的风险。
+ *
  * @param {Object} vault
  */
 export function renderStatementList(vault) {
@@ -772,62 +791,19 @@ export function renderStatementList(vault) {
 
     lastRenderedVault = vault;
 
-    const currentTagId = vault.uiState.currentTagId;
-    const isGlobalMode = vault.uiState.searchScope === SEARCH_SCOPE_GLOBAL;
-    const keyword = vault.uiState.searchKeyword;
-    const useRegex = vault.uiState.useRegex;
+    // ---------- 通过共享函数计算可见集 ----------
+    // 返回对象包含 statements 数组 + 完整上下文元数据，
+    // 后续渲染逻辑直接使用这些字段，无需二次读取 vault.uiState。
+    const visibleResult = computeVisibleStatements(vault);
+    const visibleStatements = visibleResult.statements;
+    const isGlobalMode = visibleResult.isGlobalMode;
+    const currentTagId = visibleResult.currentTagId;
+    const keyword = visibleResult.keyword;
+    const useRegex = visibleResult.useRegex;
+    const enableInitialsSearch = visibleResult.enableInitialsSearch;
 
-    // 读取首字母搜索开关
-    // vault.settings 理论上必定存在（normalizeVault 保证），
-    // 但用短路保护 + 双非，避免极端情况下读取到 undefined 抛错。
-    const enableInitialsSearch = !!(vault.settings
-        && vault.settings.enableInitialsSearch);
-
-    // 计算可见列表
-    let visibleStatements;
-    if (isGlobalMode) {
-        // 全局模式：扁平化所有标签
-        visibleStatements = [];
-        for (const tag of vault.tags) {
-            const list = vault.statementsMap[tag.id] || [];
-            for (const statement of list) {
-                visibleStatements.push({
-                    ...statement,
-                    tagId: tag.id,
-                    tagName: tag.name,
-                    tagColor: tag.color
-                });
-            }
-        }
-        if (keyword) {
-            visibleStatements = filterStatements(
-                visibleStatements,
-                keyword,
-                useRegex,
-                enableInitialsSearch
-            );
-        }
-    } else {
-        // 本地模式：只取当前标签
-        const localList = vault.statementsMap[currentTagId] || [];
-        if (keyword) {
-            visibleStatements = filterStatements(
-                localList,
-                keyword,
-                useRegex,
-                enableInitialsSearch
-            );
-        } else if (currentTagId === DEFAULT_TAG_ID) {
-            // 默认标签且无搜索：按 copyCount 降序
-            visibleStatements = sortByCopyCount(localList);
-        } else {
-            visibleStatements = localList.slice();
-        }
-    }
-
-    // ---------- 用可见列表重建语句文本索引（问题 K 修复） ----------
-    // 原实现无条件遍历所有标签的全部语句，即使这些语句当前不可见。
-    // 现改为只对可见列表建索引：
+    // ---------- 用可见列表重建语句文本索引 ----------
+    // 只对可见列表建索引：
     //   · 语义完全等价（浮层只对可见卡片触发，查询 id 一定属于可见列表）
     //   · 性能从 O(全部语句) 降为 O(可见语句)
     //   · 用 new Map() 重建，自动清空旧数据，不存在陈旧命中
