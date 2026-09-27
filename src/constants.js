@@ -16,44 +16,55 @@
 //        RECYCLE_BIN_RETENTION_DAYS 保留天数
 //        TIME_THRESHOLD_*          相对时间格式化阈值
 //   2. 新增 SETTINGS_DEFAULTS：所有设置项的默认值表。
-//      加新设置项只需在此表加一行，normalizeSettings 自动处理。
 //   3. 新增 MORE_MENU_POSITION_DELAY_MS 等交互时间参数。
 //
-// 【本次重构 · 分类层级（新增）】
-//   1. 新增分类相关常量：
+// 【分类层级重构新增】
+//   1. 分类相关常量：
 //        DEFAULT_CATEGORY_ID / DEFAULT_CATEGORY_NAME
-//          默认分类（"未分类"）的 ID 与名称。它作为所有未分类标签的
-//          兜底容器，不可被删除，也不能被重命名为空。
-//
-//   2. 新增折叠状态存储键（localStorage 独立键）：
+//   2. 折叠状态存储键（localStorage 独立键）：
 //        STORAGE_KEY_COLLAPSED_CATEGORIES
-//          存储"已折叠分类 id 集合"的 JSON 数组字符串。
-//          语义：键存在 = 用户主动折叠了其中列出的分类。
-//          "存储已折叠集合"而非"已展开集合"的取舍：
-//            · 新分类天然处于展开态（不在集合中）
-//            · 用户升级后行为一致（默认全部展开）
 //        COLLAPSED_CATEGORIES_SAVE_DEBOUNCE_MS
-//          写入防抖时长。用户快速折叠多个分类时只触发一次写入。
-//
-//   3. 新增分类模态框聚焦延迟：
+//   3. 分类模态框聚焦延迟：
 //        CATEGORY_MODAL_FOCUS_DELAY_MS
-//          与 TAG_MODAL_FOCUS_DELAY_MS 保持同一取值（100ms），
-//          保证两个"同类"模态框的焦点行为一致。
 //
-// 【为什么折叠状态不进 Vault】
-//   折叠状态是"这台设备上我看这个视图的习惯"，不是"数据"本身。
-//   它属于设备级视图偏好，与滚动位置同性质（滚动位置存 sessionStorage）。
+// 【本轮修复 · Font Awesome 加载链路改进】
 //
-//   若放进 vault.uiState：
-//     · 需要新增 setCategoryCollapsed 命令
-//     · 需要让侧边栏订阅 'ui' 切片并做增量更新
-//     · 每次折叠切换都要全量重绘侧边栏（或引入复杂的增量更新）
-//     · 引入"折叠状态跨设备同步"的伪需求
+//   背景（用户日志暴露的真实问题）：
+//     1. bootcdn 作为 SVG JS 首选，请求 5 秒超时无响应，触发 CSS 降级
+//     2. CSS 降级再次首选 bootcdn，再次超时
+//     3. 降级到 baomitu，CSS 文件本身加载成功
+//     4. baomitu CSS 引用的字体文件内容损坏（浏览器内核日志：
+//        "Failed to decode downloaded font" × 6、
+//        "OTS parsing error: Failed to convert WOFF 2.0 font to SFNT"、
+//        "Invalid table tag: 0x204F53"）
+//     5. 用户看到的是"图标完全不显示"——但应用日志显示"✅ CSS 降级
+//        加载成功"，日志与用户感知不一致
 //
-//   独立 localStorage 键：
-//     · 零命令、零切片、零 Vault 结构扰动
-//     · 折叠切换是 O(1) DOM 类切换，响应即时
-//     · 与滚动位置的存储策略完全对齐
+//   诊断出的 3 个改进点：
+//
+//     P1（本次修复核心）：
+//       CSS 加载成功 ≠ 字体可用。
+//       原实现只监听 link.onload（CSS 文件加载完成），未检测 CSS 引用
+//       的字体文件是否真正可用。
+//       修复：新增 FONTAWESOME_FONT_CHECK_TIMEOUT_MS 与
+//             FONTAWESOME_FONT_FAMILY，供 fa-loader.js 主动检测字体。
+//
+//     P2：CDN 顺序不佳。
+//       bootcdn 在国内常年不稳定（用户日志已验证），却排在首位。
+//       cdnjs 由 Cloudflare 运营，是全球最稳定的公共 CDN 之一，
+//       却排在末位。
+//       修复：调整顺序为 cdnjs → staticfile → baomitu → bootcdn。
+//
+//     P3：超时日志文案误导。
+//       "SVG JS 5 秒超时未加载"——"未加载"可被误读为"加载失败"，
+//       但实际是"请求挂起无响应"（既没 onload 也没 onerror）。
+//       修复：改为"无 CDN 响应"，语义更准确。
+//
+//   为什么不做 P4（引入 jsdelivr）：
+//     jsdelivr 未被 index.html 的 CSP 白名单允许。
+//     引入需要同时修改 index.html 的 style-src 和 font-src，
+//     影响面扩大。当前 4 个域名已覆盖主要公共 CDN，
+//     调整顺序即可显著提升命中率，无需引入新域名。
 // ========================================================================
 
 // -------------------- 存储键 --------------------
@@ -101,7 +112,7 @@ export const SALT = new Uint8Array([
 export const DEFAULT_TAG_ID = "default_main_tag_001";
 export const DEFAULT_TAG_NAME = "默认语库";
 
-// -------------------- 默认分类（本次重构新增）--------------------
+// -------------------- 默认分类 --------------------
 // 默认分类作为所有未分类标签的兜底容器。
 //
 // 命名选择"未分类"而非"默认分类"：
@@ -123,7 +134,7 @@ export const DEFAULT_CATEGORY_NAME = "未分类";
 //   - 中文字符按 14px 字号估算，20 字约占 280px，正好铺满且不换行
 //   - 20 字足以表达绝大多数标签语义
 //
-// 【本次重构说明】分类名称长度上限复用此常量，不新增。
+// 【说明】分类名称长度上限复用此常量，不新增。
 //   理由：分类与标签同属"组织维度名称"，长度约束的合理性完全一致；
 //         分开定义会增加不必要的维护负担（未来修改需同步两处）。
 export const MAX_TAG_NAME_LENGTH = 20;
@@ -145,7 +156,7 @@ export const MAX_IMPORT_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 // 单条语句的复制计数上限，防止异常数据污染排序
 export const MAX_COPY_COUNT = 1000000;
 
-// -------------------- 回收站参数（方案 A 新增）--------------------
+// -------------------- 回收站参数 --------------------
 // 回收站条数上限：超过时淘汰最旧条目（FIFO）
 //
 // 取值依据：
@@ -184,7 +195,7 @@ export const SEARCH_SCOPE_GLOBAL = "global";
 //     因此只能通过"不执行"来防御
 export const MAX_REGEX_KEYWORD_LENGTH = 200;
 
-// -------------------- 设置项默认值表（方案 A 新增）--------------------
+// -------------------- 设置项默认值表 --------------------
 // 加新设置项只需在此表加一行。
 // normalizeSettings 会自动：
 //   1. 若原始值缺失 → 用默认值
@@ -196,31 +207,100 @@ export const MAX_REGEX_KEYWORD_LENGTH = 200;
 // 当前设置项：
 //   - enableInitialsSearch: 是否启用拼音首字母搜索
 //     默认 true：与历史行为一致，用户升级后无感知
-//
-// 未来扩展示例：
-//   - theme: 'light' | 'dark' | 'auto'
-//   - fontSize: 'small' | 'medium' | 'large'
-//   - language: 'zh-CN' | 'en-US'
 export const SETTINGS_DEFAULTS = {
     enableInitialsSearch: true
 };
 
-// -------------------- Font Awesome CDN --------------------
+// ========================================================================
+// Font Awesome CDN 配置
+// ========================================================================
+//
+// 【本轮 P2 修复 · CDN 顺序调整】
+//
+//   调整前顺序：
+//     bootcdn → baomitu → staticfile → cdnjs
+//
+//   调整后顺序：
+//     cdnjs → staticfile → baomitu → bootcdn
+//
+//   调整原因（基于用户日志）：
+//     · bootcdn 排首位，但用户日志显示其请求超时（net::ERR_TIMED_OUT）
+//       且 SVG JS 5 秒无响应——这是"请求挂起"而非"请求快速失败"，
+//       造成用户等待 5 秒才触发降级
+//     · cdnjs 由 Cloudflare 运营，是全球最稳定的公共 CDN 之一，
+//       却排在末位，浪费了稳定性优势
+//     · staticfile 在国内有良好节点，比 baomitu 稳定性略高
+//     · baomitu 在用户日志中返回了损坏的字体文件，降为第三
+//
+//   为什么保留全部 4 个 CDN：
+//     每个 CDN 在不同网络环境下表现不同。多候选可覆盖更多场景。
+//     即使某个 CDN 在某地区不稳定，其他 CDN 可作为降级路径。
+//
+//   为什么不新增 jsdelivr：
+//     index.html 的 CSP 白名单未包含 jsdelivr。引入需要同时修改
+//     style-src 和 font-src，影响面扩大。当前 4 个域名已覆盖主要
+//     公共 CDN，调整顺序即可显著提升命中率。
+//
+//   SVG JS 与 CSS 使用相同的 CDN 顺序：
+//     二者是"主路径"与"降级路径"的关系，保持一致的顺序可避免
+//     "主路径在某 CDN 失败后，降级路径又首选了同一 CDN" 的冗余
+//     等待（这在原实现的 bootcdn 场景中实际发生过）。
 export const FONTAWESOME_SVG_CDNS = [
-    'https://cdn.bootcdn.net/ajax/libs/font-awesome/6.1.0/js/all.min.js',
-    'https://lib.baomitu.com/font-awesome/6.1.0/js/all.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.0/js/all.min.js',
     'https://cdn.staticfile.org/font-awesome/6.1.0/js/all.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.0/js/all.min.js'
+    'https://lib.baomitu.com/font-awesome/6.1.0/js/all.min.js',
+    'https://cdn.bootcdn.net/ajax/libs/font-awesome/6.1.0/js/all.min.js'
 ];
 
 export const FONTAWESOME_CSS_CDNS = [
-    'https://cdn.bootcdn.net/ajax/libs/font-awesome/6.1.0/css/all.min.css',
-    'https://lib.baomitu.com/font-awesome/6.1.0/css/all.min.css',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.0/css/all.min.css',
     'https://cdn.staticfile.org/font-awesome/6.1.0/css/all.min.css',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.0/css/all.min.css'
+    'https://lib.baomitu.com/font-awesome/6.1.0/css/all.min.css',
+    'https://cdn.bootcdn.net/ajax/libs/font-awesome/6.1.0/css/all.min.css'
 ];
 
+// SVG JS 加载的超时时间。
+// 语义：从 initializeFontAwesomeLoader 调用起，等待 SVG JS 任一 CDN
+//       加载完成的最长时间。超过此时间若未加载成功，启动 CSS 降级。
+//
+// 取值依据：
+//   - 正常网络下 SVG JS（约 1MB）应在 1-2 秒内加载完成
+//   - 5 秒是"容忍慢网络"与"避免用户长时间等待"的平衡点
+//   - 用户日志显示 bootcdn 请求挂起 5 秒才触发降级，
+//     这段等待虽然必要（因为无法预知请求会成功还是失败），
+//     但通过 CDN 顺序调整（P2）可显著减少发生概率
 export const FONTAWESOME_LOAD_TIMEOUT_MS = 5000;
+
+// 【本轮 P1 新增】字体可用性检测超时。
+//
+// 语义：CSS 加载成功后，等待 Font Awesome 字体文件真正加载完成
+//       （或明确失败）的最长时间。超时视为字体不可用，
+//       fa-loader.js 会继续尝试下一个 CSS CDN。
+//
+// 取值依据：
+//   - Font Awesome 字体文件（fa-solid-900.woff2 等）通常 < 100KB
+//   - 正常网络下应在 1-2 秒内完成
+//   - 3 秒是"宽容慢网络"与"避免长时间等待下一个 CDN"的平衡点
+//   - 若取太长（如 10 秒），用户在看到图标前会经历漫长等待；
+//     若取太短（如 1 秒），慢网络下会误判字体不可用，
+//     无意义地消耗下一个 CDN 的流量
+export const FONTAWESOME_FONT_CHECK_TIMEOUT_MS = 3000;
+
+// 【本轮 P1 新增】Font Awesome 6 免费版的正文字体族名。
+//
+// 用途：fa-loader.js 通过 document.fonts.load() 主动触发字体加载，
+//       并检测字体是否真的可用。
+//
+// Font Awesome 6 的字体族命名规则：
+//   · "Font Awesome 6 Free"   —— 免费版核心（Solid / Regular 图标）
+//   · "Font Awesome 6 Brands" —— 品牌图标（GitHub / Twitter 等）
+//   · "Font Awesome 6 Pro"    —— Pro 版（本项目未使用）
+//
+// 本项目使用免费版，因此检测 "Font Awesome 6 Free"。
+// 只要核心字体可用，绝大多数图标即可正常渲染。
+//
+// 若未来升级到 FA 7.x，需要同步更新此常量。
+export const FONTAWESOME_FONT_FAMILY = 'Font Awesome 6 Free';
 
 // -------------------- UI 时间参数 --------------------
 export const TOAST_DURATION_MS = 2200;
@@ -231,7 +311,7 @@ export const ADD_STATEMENT_SCROLL_DELAY_MS = 50;
 export const TAG_MODAL_FOCUS_DELAY_MS = 100;
 export const INPUT_ERROR_SHAKE_DURATION_MS = 400;
 
-// 分类模态框聚焦延迟（本次重构新增）
+// 分类模态框聚焦延迟
 // 与 TAG_MODAL_FOCUS_DELAY_MS 保持同一取值，保证两个同类模态框
 // 的焦点行为一致：均为打开后 100ms 内将焦点置于名称输入框。
 export const CATEGORY_MODAL_FOCUS_DELAY_MS = 100;

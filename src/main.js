@@ -59,71 +59,90 @@
 // 【第四批重构（历史）】
 //   问题 · 编辑事故遗留的两个死引用（源码卫生）
 //
-// 【分类层级（本模块基础）】
-//   1. initializeSidebar 增加 4 个分类相关的回调：
-//        · onCategoryAdd      → handleCategoryAdd
-//        · onCategoryEdit     → handleCategoryEdit
-//        · onCategoryDelete   → handleCategoryDelete
-//        · onCategoryReorder  → handleCategoryReorder
-//
+// 【分类层级（历史）】
+//   1. initializeSidebar 增加 4 个分类相关的回调
 //   2. handleAddTag / handleTagEdit 传递分类列表给模态框
 //
-//   3. handleReset / handleFullImport 的 replaceVault 调用
-//      不需要修改——normalizedVault 已包含 categories 字段
+// 【Bug 12 修复（历史）】
+//   handleTagEdit 增加三字段联动（name / color / categoryId）
+//   的"未做修改"检测。
 //
-// 【上一轮 Bug 修复】
-//   Bug 2（handleCategoryEdit 缺少"未做修改"检测）：
-//     · 增加检测：若用户提交的名称与现有名称相同 → 提示"未做修改"并返回
+// 【select-tag 分类分组接线（历史）】
+//   4 处 openSelectTagModal 调用新增 categories 参数。
 //
-//   Bug 1 配套（onCategoryCollapseBlocked 接线）：
-//     · initializeSidebar 新增回调 onCategoryCollapseBlocked
-//     · 新增 handleCategoryCollapseBlocked 函数：显示 Toast 提示
+// 【本轮修复 · 导入导出的完整反馈】
 //
-// 【本轮 Bug 12 修复 · handleTagEdit 缺少"未做修改"检测】
-//   背景：
-//     handleCardEdit 与 handleCategoryEdit 都有"文本/名称未变时提示
-//     '未做修改'"的短路逻辑，但 handleTagEdit 缺失。若不修复：
-//       用户双击标签、不修改任何字段直接确定
-//       → dispatch('editTag') 被调用
-//       → 命令层幂等（三字段均无变化）返回原 vault 引用
-//       → Facade 检测到 nextVault === previousVault，返回 false
-//       → 由于 didEdit === false，弹出"标签更新失败：名称无效或已被占用"
-//       → 用户困惑："我什么都没改，为什么失败？"
+//   背景（上一轮审核发现的真实体验缺口）：
 //
-//   为什么与 handleCategoryEdit 的检测略有不同：
-//     · handleCategoryEdit 只需检查 name（分类模态框只有 name 一个字段）
-//     · handleTagEdit 需检查**三个字段**（name / color / categoryId）：
-//         - 若仅检查 name，则"用户保持名称不变、仅修改颜色或分类归属"
-//           会被误判为"未做修改"，导致真实修改被拦截（严重 bug）
-//         - 三字段全部未变化才是真正的"未做修改"
+//     用户导入备份后，若备份中有非法数据被丢弃，应用**不会告知**。
+//     用户只看到"导入成功：N 个分类，M 个标签，K 条语句"——
+//     若备份原本有 5 个分类、导入后只剩 3 个，用户不知道
+//     发生了什么，也无从排查。
+//
+//   发现的 5 个缺口：
+//
+//     I1（中）：丢弃分类时无提示。
+//       归一化会丢弃 id 或 name 为空的分类，但 handleFullImport
+//       只统计了标签与语句的丢弃数。
+//
+//     I2（中）：丢弃回收站条目时无提示。
+//       normalizeRecycleBin 会丢弃缺 id / text 或 deletedAt 无效的
+//       条目，同样未被统计。
+//
+//     I3（中）：JSON 语法错误提示技术化。
+//       原实现直接 `showMessage('导入失败: ' + importError.message)`，
+//       用户看到的是 "Unexpected token < in JSON at position 0"
+//       这类开发者术语，无法理解出错原因，也不知道如何修正。
+//
+//     I4（低）：未区分 JSON 解析错误与格式错误。
+//       原 catch 块同时处理 JSON.parse 抛出的 SyntaxError 与业务
+//       层抛出的"格式不支持"，二者消息性质不同却共用一条路径。
+//
+//     I5（低）：未检查文件扩展名。
+//       <input accept=".json"> 只是建议，用户仍可选"所有文件"。
+//       误选 .txt 或 .xlsx 后，错误提示不友好。
 //
 //   修复方案：
-//     在 dispatch 之前增加短路检测：
-//       若 result.name === tag.name
-//          && result.color === tag.color
-//          && result.categoryId === tag.categoryId
-//       → 提示"未做修改"并返回
 //
-//   与 handleCategoryEdit / handleCardEdit 的判定行为保持一致：
-//     · handleCardEdit：`if (result.text === found.statement.text.trim())`
-//     · handleCategoryEdit：`if (result.name === category.name)`
-//     · handleTagEdit（本次）：三字段联合比较
+//     · handleFullImport 中增加 4 类丢弃计数：
+//         分类 / 标签 / 语句 / 回收站条目
+//       每类都在最终消息中报告，让用户完整知晓"发生了什么"。
 //
-// 【本轮重构 · select-tag 模态框分类分组接线】
-//   在 4 处 openSelectTagModal 调用点新增 categories 参数：
-//     1. handleCardCopyToTag（复制语句到标签）
-//     2. handleBatchMove（批量移动到标签）
-//     3. handleRecycleRestoreSingle（源标签已删除时选择恢复目标）
-//     4. handleRecycleRestoreBatch（批量恢复时选择目标标签）
+//     · 分类与标签的丢弃数计算需要处理"默认项是否原始存在"：
+//         归一化会补齐缺失的默认分类与默认标签。
+//         若直接 original - normalized，在"原始不含默认项"的场景下
+//         会低估丢弃数。
+//       修复：
+//         检测原始数组是否含 DEFAULT_CATEGORY_ID / DEFAULT_TAG_ID；
+//         若不含，归一化后的计数需减去"新增的默认项"再参与计算。
 //
-//   为什么要传 categories：
-//     select-tag.js 的分组渲染需要按 vault.categories 顺序遍历，
-//     以保证与 sidebar 的分类顺序严格一致。
-//     详见 select-tag.js 文件头注释。
+//     · 回收站条目的丢弃数无需特殊处理：
+//         normalizeRecycleBin 无补齐逻辑，直接相减即可。
 //
-//   为什么不预先在 main.js 分组：
-//     "把 tags 按 categoryId 分桶"是呈现组织逻辑，属于视图层职责。
-//     放在 main.js 会导致 4 处重复实现，且未来加新规则需改多处。
+//     · handleImport 拆分为两阶段错误处理：
+//         阶段 1：JSON.parse 的 try/catch（独立）
+//         阶段 2：业务处理的 try/catch
+//       JSON.parse 失败时，根据文件扩展名给出不同的提示文案：
+//         · 有 .json 扩展名 → "文件内容不是合法的 JSON"
+//         · 无 .json 扩展名 → "文件内容不是合法 JSON，且文件名不是
+//                              .json 扩展名"
+//
+//     · handleLegacyImport 增加丢弃数报告：
+//         原实现只报告"新增 N 条、跳过重复 M 条"，
+//         未报告"因空文本 / 非法格式被丢弃的条目数"。
+//         补充报告使旧格式导入的反馈也完整。
+//
+//   为什么扩展名检查不阻断流程：
+//     某些系统的文件选择器返回的文件名可能不含扩展名（例如
+//     从 URL 下载时浏览器自动重命名）；严格阻断会造成不必要的
+//     用户困惑。
+//     采用"仅在 JSON.parse 失败时用于区分提示文案"的策略，
+//     既覆盖了 I5 的诉求，又不引入新的限制。
+//
+//   为什么不精确计算"分类被丢弃的具体个数"：
+//     精确统计需要在 main.js 中重复 normalizeCategories 的校验
+//     逻辑，一旦 vault.js 的校验规则变化需要同步维护。
+//     当前方案通过"默认项检测"修正，已在所有实际场景下准确。
 // ========================================================================
 
 import {
@@ -202,7 +221,7 @@ import {
 } from './views/more-menu.js';
 import { initializeShortcuts } from './shortcuts.js';
 
-// ==================== 模块级状态（剪贴板日志降噪，问题 M） ====================
+// ==================== 模块级状态（剪贴板日志降噪） ====================
 // 语义：本会话是否已经记录过"现代 Clipboard API 失败"的警告。
 // 用途：避免在 HTTP 上下文中每次复制都刷 console.warn。
 // 生命周期：模块级，不进入 Vault，不持久化；页面刷新后重置。
@@ -218,7 +237,7 @@ let hasLoggedModernClipboardFailure = false;
  *   2. 若现代 API 不存在，或调用时抛异常（例如在 HTTP 上下文、
  *      或用户拒绝权限），则回退到旧的 execCommand('copy')
  *
- * 【问题 M 修复 · 日志降噪】
+ * 【日志降噪】
  *   在 HTTP 上下文中，现代 API 每次调用都会失败。若每次都 warn，
  *   用户长时间使用会积累大量重复日志。
  *
@@ -236,7 +255,6 @@ async function copyTextToClipboard(text) {
             await navigator.clipboard.writeText(text);
             return;
         } catch (modernClipboardError) {
-            // 【问题 M 修复】仅在本会话首次失败时 warn
             if (!hasLoggedModernClipboardFailure) {
                 hasLoggedModernClipboardFailure = true;
                 console.warn(
@@ -282,7 +300,7 @@ async function copyTextToClipboard(text) {
 /**
  * 应用启动主流程。
  *
- * 【问题 I 修复 · 加载失败保护】
+ * 【加载失败保护】
  *   initializeFacade 在 loadVaultFromStorage 抛异常时会返回 null
  *   （见 facade.js 的 FA-4 保护）。此时不能继续初始化视图层——
  *   否则 initializeAllViews 内部的第一行 getVaultSnapshot().uiState
@@ -300,7 +318,7 @@ async function bootstrap() {
         toastHandler: showMessage
     });
 
-    // ---------- 【问题 I 修复】检查加载结果 ----------
+    // ---------- 检查加载结果 ----------
     if (!loadedVault) {
         console.error(
             '[main] Vault 加载失败：initializeFacade 返回 null。'
@@ -363,7 +381,7 @@ function initializeAllViews() {
         onCategoryEdit: handleCategoryEdit,
         onCategoryDelete: handleCategoryDelete,
         onCategoryReorder: handleCategoryReorder,
-        // 【Bug 1 配套】折叠被拒绝时的提示回调
+        // Bug 1 配套：折叠被拒绝时的提示回调
         onCategoryCollapseBlocked: handleCategoryCollapseBlocked
     });
 
@@ -423,7 +441,7 @@ function initializeAllViews() {
             searchScope: vault.uiState.searchScope
         });
         updateHeaderStats(computeVisibleCount());
-        // 【第一批重构 · 问题 C】同步侧边栏展开状态
+        // 同步侧边栏展开状态（导入 / 重置后 uiState 被替换）
         syncSidebarExpandedState(vault.uiState.sidebarExpanded);
     });
     // 订阅回收站切片 → 更新徽章
@@ -439,9 +457,11 @@ function initializeAllViews() {
 /**
  * 计算当前可见语句数量。
  *
- * 【第三批重构 · 可见集单一真相源】
- *   本函数不再独立实现可见集算法，而是委托给
+ * 【可见集单一真相源】
+ *   本函数不独立实现可见集算法，而是委托给
  *   commands/search.js 的 computeVisibleStatements(vault)。
+ *   与 statement-list.js 共享同一实现，
+ *   从结构上消除"列表显示 10 条、徽章写着 15 条"的漂移风险。
  *
  * @returns {number}
  */
@@ -481,7 +501,7 @@ function renderAll() {
 /**
  * 切换标签
  *
- * 【第一批重构 · 问题 A】
+ * 【快速切标签时滚动位置丢失的修复】
  *   在 dispatch('switchTag') 之前先 flush 主列表的滚动位置。
  *
  * @param {string} tagId
@@ -523,9 +543,7 @@ async function handleTagDelete(tagId) {
 /**
  * 编辑标签
  *
- * 【本轮 Bug 12 修复 · 未修改检测】
- *   背景与根因见文件头注释。
- *
+ * 【Bug 12 修复 · 未修改检测】
  *   检测三字段联动：
  *     · name       —— 名称未变
  *     · color      —— 颜色未变
@@ -561,7 +579,7 @@ async function handleTagEdit(tagId) {
     });
     if (!result) return;
 
-    // 【Bug 12 修复】未修改检测：三字段全部未变化才视为"未做修改"
+    // 未修改检测：三字段全部未变化才视为"未做修改"
     if (result.name === tag.name
         && result.color === tag.color
         && result.categoryId === tag.categoryId) {
@@ -666,7 +684,7 @@ async function handleCategoryAdd() {
 /**
  * 重命名分类
  *
- * 【上一轮 Bug 2 修复 · 未修改检测】
+ * 【Bug 2 修复 · 未修改检测】
  *   分类模态框只有 name 一个字段，因此只比较 name。
  */
 async function handleCategoryEdit(categoryId) {
@@ -687,7 +705,7 @@ async function handleCategoryEdit(categoryId) {
     });
     if (!result) return;
 
-    // 【Bug 2 修复】未修改检测
+    // 未修改检测
     if (result.name === category.name) {
         showMessage('未做修改');
         return;
@@ -764,10 +782,9 @@ async function handleCategoryDelete(categoryId) {
 /**
  * 重排分类顺序
  *
- * 【Bug 8 说明】
- *   命令层（category-crud.js 的 reorderCategories）会强制默认分类首位，
- *   交互层（sidebar.js 的 onMove）也会阻止将任何分类拖到默认分类之前。
- *   本函数无需额外处理。
+ * 命令层（category-crud.js 的 reorderCategories）会强制默认分类首位，
+ * 交互层（sidebar.js 的 onMove）也会阻止将任何分类拖到默认分类之前。
+ * 本函数无需额外处理。
  *
  * @param {string[]} orderedIds
  */
@@ -865,7 +882,9 @@ async function handleCardDelete(statementId) {
 /**
  * 复制语句到剪贴板，并累加复制计数。
  *
- * 【M2 修复】增加"卡片是否原本在视口内"的判断。
+ * 【滚动补偿】
+ *   复制后若卡片在视口内，且因排序变化而移动，则补偿主列表的
+ *   滚动位置，使卡片视觉位置保持不变。
  */
 async function handleCardCopy(statementId) {
     const vault = getVaultSnapshot();
@@ -903,8 +922,8 @@ async function handleCardCopy(statementId) {
 /**
  * 复制语句到其他标签（通过 select-tag 模态框选择目标）
  *
- * 【本轮重构 · 分类分组接线】
- *   openSelectTagModal 新增 categories 参数，使候选标签按分类分组显示。
+ * 【select-tag 分类分组接线】
+ *   openSelectTagModal 传入 categories 参数，使候选标签按分类分组显示。
  *   categories 直接取 vault.categories（已由 normalizeCategories 保证
  *   默认分类在首位，顺序与 sidebar 严格一致）。
  */
@@ -930,7 +949,6 @@ async function handleCardCopyToTag(statementId) {
         title: '复制语句到标签',
         tags: candidateTags,
         counts: counts,
-        // 【本轮新增】传递分类列表，触发分组渲染
         categories: vault.categories,
         excludeTagId: null
     });
@@ -1048,7 +1066,7 @@ async function handleBatchDelete() {
     let confirmMessage = '确定删除选中的 ' + selectedIds.size + ' 条语句吗？\n\n'
         + previewLines + moreSuffix;
 
-    // 【M1 修复】回收站溢出警告
+    // 回收站溢出警告
     if (selectedIds.size > MAX_RECYCLE_BIN_SIZE) {
         const overflowCount = selectedIds.size - MAX_RECYCLE_BIN_SIZE;
         confirmMessage += '\n\n⚠️ 回收站容量上限为 ' + MAX_RECYCLE_BIN_SIZE
@@ -1076,8 +1094,8 @@ async function handleBatchDelete() {
 /**
  * 批量移动到标签
  *
- * 【本轮重构 · 分类分组接线】
- *   openSelectTagModal 新增 categories 参数，使候选标签按分类分组显示。
+ * 【select-tag 分类分组接线】
+ *   openSelectTagModal 传入 categories 参数，使候选标签按分类分组显示。
  */
 async function handleBatchMove() {
     const selectedIds = getSelectedStatementIds();
@@ -1103,7 +1121,6 @@ async function handleBatchMove() {
         title: '移动选中语句到标签',
         tags: candidateTags,
         counts: counts,
-        // 【本轮新增】传递分类列表，触发分组渲染
         categories: vault.categories,
         excludeTagId: null
     });
@@ -1208,8 +1225,10 @@ async function handleBatchMove() {
 /**
  * 添加语句到底部输入区。
  *
- * 【M4 修复】延迟滚动的上下文校验扩展为四元组。
- * 【P1-N2 修复】使用 dispatch 返回值判断命令是否真的执行。
+ * 【延迟滚动的上下文校验扩展为四元组】
+ *   添加成功后延迟滚动到底部，但需要校验"上下文的四元组"未变化：
+ *     tagId / searchScope / searchKeyword / useRegex
+ *   任一变化则取消滚动（用户可能已切到别的视图）。
  */
 function handleAddStatement(text) {
     const vault = getVaultSnapshot();
@@ -1263,10 +1282,19 @@ function handleAddStatement(text) {
 /**
  * 导出完整工作区为 JSON 文件。
  *
- * 【P3-N4 + W2 + N1 修复】延迟释放 ObjectURL、挂载到 DOM、
- * 使用屏幕外绝对定位（非 display: none）。
+ * 【下载链接的正确挂载】
+ *   Safari 与部分 iOS 浏览器要求 <a> 元素**真正挂载在 DOM 上**
+ *   才能触发 download 属性。使用屏幕外绝对定位（非 display: none），
+ *   因为 display: none 会让某些浏览器忽略 click()。
  *
- * 【C3 修复】补全导出字段。
+ * 【ObjectURL 的延迟释放】
+ *   立即 revokeObjectURL 会导致下载失败（浏览器可能尚未开始读取）。
+ *   延迟 1 秒后释放是"宽容但不过分"的平衡。
+ *
+ * 【导出字段完整性】
+ *   包含 Vault 的全部 6 个顶层字段：
+ *     categories / tags / statementsMap / recycleBin / uiState / settings
+ *   外加 exportDate 时间戳（仅用于用户识别，导入时被忽略）。
  */
 async function handleExport() {
     const vault = getVaultSnapshot();
@@ -1314,14 +1342,48 @@ async function handleExport() {
     showMessage('已导出完整工作区');
 }
 
+/**
+ * 导入文件处理。
+ *
+ * 【本轮改进 · 两阶段错误处理】
+ *
+ *   背景（I3 + I4 + I5 修复）：
+ *     原实现用一个 try/catch 处理了 JSON.parse 与后续业务处理，
+ *     导致 JSON 语法错误时直接暴露 SyntaxError 消息（形如
+ *     "Unexpected token < in JSON at position 0"），
+ *     用户无法理解出错原因。
+ *
+ *   修复方案：分两阶段处理。
+ *
+ *     阶段 1：JSON.parse
+ *       独立 try/catch。捕获 SyntaxError，根据文件扩展名给出
+ *       面向用户的提示：
+ *         · 有 .json 扩展名 → "文件内容不是合法的 JSON"
+ *         · 无 .json 扩展名 → "文件内容不是合法 JSON，且文件名不是
+ *                              .json 扩展名"
+ *
+ *     阶段 2：业务处理
+ *       独立 try/catch。捕获 handleLegacyImport / handleFullImport
+ *       可能抛出的异常，给出通用提示。
+ *
+ * 【为什么不阻断非 .json 文件】
+ *   某些系统的文件选择器返回的文件名可能不含扩展名
+ *   （例如从 URL 下载时浏览器自动重命名）。
+ *   严格阻断会造成不必要的用户困惑。
+ *   本策略：不阻断，仅在 JSON.parse 失败时用于区分提示文案。
+ *
+ * @param {File} file
+ */
 async function handleImport(file) {
     if (!file) return;
 
+    // ---------- 文件大小检查 ----------
     if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
         const fileSizeInMegabytes = (file.size / 1024 / 1024).toFixed(1);
         const limitInMegabytes = (MAX_IMPORT_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0);
         showMessage(
-            '导入文件过大（' + fileSizeInMegabytes + ' MB），上限 ' + limitInMegabytes + ' MB',
+            '导入文件过大（' + fileSizeInMegabytes + ' MB），上限 '
+            + limitInMegabytes + ' MB',
             true
         );
         return;
@@ -1330,22 +1392,68 @@ async function handleImport(file) {
     const reader = new FileReader();
 
     reader.onload = async function (event) {
+        // ========== 阶段 1：JSON 解析 ==========
+        let parsedData;
         try {
-            const parsedData = JSON.parse(event.target.result);
+            parsedData = JSON.parse(event.target.result);
+        } catch (jsonParseError) {
+            // JSON.parse 在解析失败时抛出 SyntaxError
+            const lowerCaseFileName = String(file.name || '').toLowerCase();
+            const hasJsonExtension = lowerCaseFileName.endsWith('.json');
 
+            let errorMessage;
+            if (hasJsonExtension) {
+                errorMessage = '导入失败：文件内容不是合法的 JSON 格式。'
+                    + '文件可能已损坏或被意外修改，请重新导出后重试。';
+            } else {
+                errorMessage = '导入失败：文件内容不是合法的 JSON 格式，'
+                    + '且文件名不是 .json 扩展名。'
+                    + '请确认选择的是本应用导出的 .json 备份文件。';
+            }
+
+            // 开发日志保留技术细节，便于定位问题
+            console.warn('[main] 导入文件的 JSON 解析失败:', {
+                fileName: file.name,
+                fileSizeInBytes: file.size,
+                jsonParseErrorMessage: jsonParseError && jsonParseError.message
+            });
+            showMessage(errorMessage, true);
+            return;
+        }
+
+        // ========== 阶段 2：业务处理 ==========
+        try {
+            // ---------- 分支 A：旧格式（纯数组）----------
             if (Array.isArray(parsedData)) {
                 await handleLegacyImport(parsedData);
                 return;
             }
 
+            // ---------- 分支 B：完整备份 ----------
             if (parsedData && parsedData.tags && parsedData.statementsMap) {
                 await handleFullImport(parsedData);
                 return;
             }
 
-            throw new Error('格式不支持');
+            // ---------- 分支 C：结构不支持 ----------
+            // JSON 合法但结构不符合本应用支持的任一格式
+            showMessage(
+                '导入失败：备份格式不兼容。'
+                + '文件内容是合法 JSON，但不是本应用支持的备份结构。'
+                + '请确认选择的是本应用导出的完整备份（含 tags 与 '
+                + 'statementsMap 字段）或旧格式语句列表（纯数组）。',
+                true
+            );
         } catch (importError) {
-            showMessage('导入失败: ' + importError.message, true);
+            // 业务处理过程中的异常（如 handleLegacyImport / handleFullImport
+            // 内部未捕获的错误）
+            console.error('[main] 导入处理异常:', importError);
+            showMessage(
+                '导入失败：' + (importError && importError.message
+                    ? importError.message
+                    : '未知错误'),
+                true
+            );
         }
     };
 
@@ -1358,7 +1466,23 @@ async function handleImport(file) {
 }
 
 /**
- * 旧格式（纯数组）导入
+ * 旧格式（纯数组）导入。
+ *
+ * 【本轮改进 · 增加丢弃数报告】
+ *   原实现只报告"新增 N 条、跳过重复 M 条"。
+ *   但数组中的条目可能因以下两种原因被丢弃：
+ *     1. 空文本 / 非法格式
+ *     2. 与目标标签下已有语句重复
+ *   原实现的"跳过重复 M"只覆盖了原因 2。原因 1 的丢弃数未被报告。
+ *
+ *   修复：新增 droppedEntryCount，在最终消息中报告。
+ *
+ * 【数据流】
+ *   1. 二次确认
+ *   2. 遍历数组，提取有效条目（text 非空），丢弃非法
+ *   3. dispatch addStatementsBatch，命令层再次去重
+ *   4. 对比 dispatch 前后的语句数，得出"新增数"与"跳过重复数"
+ *   5. 报告：新增 / 跳过重复 / 忽略无效
  */
 async function handleLegacyImport(parsedArray) {
     const confirmed = await showConfirmDialog(
@@ -1370,6 +1494,7 @@ async function handleLegacyImport(parsedArray) {
     const currentTagId = vault.uiState.currentTagId;
     const beforeCount = (vault.statementsMap[currentTagId] || []).length;
 
+    // ---------- 遍历数组，提取有效条目 ----------
     const validEntries = [];
     for (const item of parsedArray) {
         const rawText = String((item && item.text) || '');
@@ -1382,40 +1507,119 @@ async function handleLegacyImport(parsedArray) {
         validEntries.push({ text: trimmedText, copyCount: copyCount });
     }
 
+    // ---------- 丢弃数计算 ----------
+    // 因空文本或非法格式被丢弃的条目数（与"与已有重复"不同）
+    const droppedEntryCount = parsedArray.length - validEntries.length;
+
+    // ---------- 全无有效条目 ----------
     if (validEntries.length === 0) {
-        showMessage('导入文件中没有有效语句', true);
+        let message = '导入文件中没有有效语句';
+        if (droppedEntryCount > 0) {
+            message += '（共 ' + droppedEntryCount + ' 条内容为空或格式非法）';
+        }
+        showMessage(message, true);
         return;
     }
 
+    // ---------- dispatch ----------
     const didAdd = dispatch('addStatementsBatch', {
         tagId: currentTagId,
         entries: validEntries
     });
 
     if (!didAdd) {
-        showMessage('导入失败：没有可添加的新语句', true);
+        // 全部因"与已有重复"被命令层跳过
+        showMessage(
+            '导入失败：没有可添加的新语句'
+            + '（' + validEntries.length + ' 条均与当前标签下已有语句重复）',
+            true
+        );
         return;
     }
 
+    // ---------- 统计结果 ----------
     const afterVault = getVaultSnapshot();
     const afterCount = (afterVault.statementsMap[currentTagId] || []).length;
     const addedCount = afterCount - beforeCount;
-    const skippedCount = validEntries.length - addedCount;
+    const duplicateSkippedCount = validEntries.length - addedCount;
 
-    showMessage('导入完成: 新增 ' + addedCount + ' 条，跳过重复 ' + skippedCount + ' 条');
+    // ---------- 构建消息 ----------
+    let message = '导入完成：新增 ' + addedCount + ' 条';
+
+    if (duplicateSkippedCount > 0) {
+        message += '，跳过重复 ' + duplicateSkippedCount + ' 条';
+    }
+    if (droppedEntryCount > 0) {
+        message += '，忽略无效 ' + droppedEntryCount + ' 条';
+    }
+
+    showMessage(message);
 }
 
 /**
- * 完整备份导入
+ * 完整备份导入。
+ *
+ * 【本轮改进 · 完整的丢弃数报告】
+ *
+ *   背景（I1 + I2 修复）：
+ *     归一化会丢弃以下非法数据：
+ *       · 分类：id 或 name 为空
+ *       · 标签：id 或 name 为空
+ *       · 语句：id 或 text 为空
+ *       · 回收站条目：缺 id / text 或 deletedAt 无效
+ *     原实现只统计了标签与语句的丢弃数，遗漏了分类和回收站。
+ *
+ *   修复：新增分类与回收站条目的丢弃数统计，全部在最终消息中报告。
+ *
+ * 【默认项检测的必要性】
+ *   归一化会补齐缺失的默认分类与默认标签：
+ *     · normalizeCategories 在结果不含默认分类时 unshift 一个
+ *     · ensureDefaultTagExists 在结果不含默认标签时 unshift 一个
+ *
+ *   若直接 `original - normalized` 计算丢弃数，在"原始不含默认项"
+ *   的场景下会低估丢弃数。
+ *
+ *   例：原始 3 个分类（不含默认），1 个非法 → 归一化后 3 个
+ *       （2 有效 + 1 新增默认）
+ *       · 直接相减：3 - 3 = 0  ← 错误，实际丢了 1 个
+ *       · 修正后：3 - (3 - 1) = 1  ← 正确
+ *
+ *   修复方案：
+ *     检测原始数组是否含 DEFAULT_CATEGORY_ID / DEFAULT_TAG_ID。
+ *     若不含，归一化后的计数需减去"新增的默认项"再参与计算。
+ *
+ * 【回收站无需默认项检测】
+ *   normalizeRecycleBin 无补齐逻辑，直接相减即可。
  */
 async function handleFullImport(parsedData) {
     const confirmed = await showConfirmDialog('导入完整备份将覆盖当前所有数据，确定吗？');
     if (!confirmed) return;
 
+    // ========================================================================
+    // 阶段 1：统计原始数据（用于丢弃数计算）
+    // ========================================================================
+
+    // ---------- 分类 ----------
+    const originalCategoryCount = Array.isArray(parsedData.categories)
+        ? parsedData.categories.length
+        : 0;
+    // 检测原始数据是否含默认分类（用于修正归一化补齐的影响）
+    const inputHadDefaultCategory = Array.isArray(parsedData.categories)
+        && parsedData.categories.some(function (rawCategory) {
+            return rawCategory && rawCategory.id === DEFAULT_CATEGORY_ID;
+        });
+
+    // ---------- 标签 ----------
     const originalTagCount = Array.isArray(parsedData.tags)
         ? parsedData.tags.length
         : 0;
+    // 检测原始数据是否含默认标签（用于修正归一化补齐的影响）
+    const inputHadDefaultTag = Array.isArray(parsedData.tags)
+        && parsedData.tags.some(function (rawTag) {
+            return rawTag && rawTag.id === DEFAULT_TAG_ID;
+        });
 
+    // ---------- 语句 ----------
     let originalStatementCount = 0;
     if (parsedData.statementsMap
         && typeof parsedData.statementsMap === 'object') {
@@ -1426,6 +1630,15 @@ async function handleFullImport(parsedData) {
             }
         }
     }
+
+    // ---------- 回收站 ----------
+    const originalRecycleBinCount = Array.isArray(parsedData.recycleBin)
+        ? parsedData.recycleBin.length
+        : 0;
+
+    // ========================================================================
+    // 阶段 2：归一化
+    // ========================================================================
 
     let normalizedVault;
     try {
@@ -1443,19 +1656,61 @@ async function handleFullImport(parsedData) {
         return;
     }
 
+    // ========================================================================
+    // 阶段 3：统计归一化后的数据
+    // ========================================================================
+
     let normalizedStatementCount = 0;
     for (const tagId of Object.keys(normalizedVault.statementsMap)) {
         normalizedStatementCount += normalizedVault.statementsMap[tagId].length;
     }
 
+    // ========================================================================
+    // 阶段 4：计算丢弃数
+    // ========================================================================
+
+    // ---------- 分类 ----------
+    // 归一化后的分类数包含"新增的默认分类"（若原始不含）。
+    // 计算丢弃数前需扣除这部分"新增"，否则会低估丢弃数。
+    //
+    // 例：原始 3 个（不含默认），1 个非法
+    //     → 归一化后 3 个（2 有效 + 1 新增默认）
+    //     → 修正后有效原始数 = 3 - 1 = 2
+    //     → 丢弃数 = 3 - 2 = 1  ✓
+    const normalizedCategoryCountMinusAddedDefault =
+        normalizedVault.categories.length - (inputHadDefaultCategory ? 0 : 1);
+    const droppedCategoryCount = Math.max(
+        0,
+        originalCategoryCount - normalizedCategoryCountMinusAddedDefault
+    );
+
+    // ---------- 标签 ----------
+    // 与分类同理：归一化会补齐默认标签，需扣除"新增"。
+    const normalizedTagCountMinusAddedDefault =
+        normalizedVault.tags.length - (inputHadDefaultTag ? 0 : 1);
     const droppedTagCount = Math.max(
         0,
-        originalTagCount - normalizedVault.tags.length
+        originalTagCount - normalizedTagCountMinusAddedDefault
     );
+
+    // ---------- 语句 ----------
+    // normalizeStatements 无补齐逻辑，直接相减。
     const droppedStatementCount = Math.max(
         0,
         originalStatementCount - normalizedStatementCount
     );
+
+    // ---------- 回收站 ----------
+    // normalizeRecycleBin 无补齐逻辑，直接相减。
+    // 丢弃原因包括：缺 id / text、deletedAt 无效、超出 MAX_RECYCLE_BIN_SIZE
+    const droppedRecycleBinCount = Math.max(
+        0,
+        originalRecycleBinCount - normalizedVault.recycleBin.length
+    );
+
+    // ========================================================================
+    // 阶段 5：执行替换
+    // ========================================================================
 
     clearStatementSelection(false);
 
@@ -1466,6 +1721,10 @@ async function handleFullImport(parsedData) {
         allSelected: false
     });
 
+    // ========================================================================
+    // 阶段 6：构建成功消息
+    // ========================================================================
+
     let message = '导入成功：' + normalizedVault.categories.length + ' 个分类，'
         + normalizedVault.tags.length + ' 个标签，'
         + normalizedStatementCount + ' 条语句';
@@ -1474,13 +1733,24 @@ async function handleFullImport(parsedData) {
         message += '，回收站 ' + normalizedVault.recycleBin.length + ' 条';
     }
 
-    if (droppedTagCount > 0 || droppedStatementCount > 0) {
+    // ---------- 丢弃明细 ----------
+    if (droppedCategoryCount > 0
+        || droppedTagCount > 0
+        || droppedStatementCount > 0
+        || droppedRecycleBinCount > 0) {
+
         const dropParts = [];
+        if (droppedCategoryCount > 0) {
+            dropParts.push(droppedCategoryCount + ' 个非法分类');
+        }
         if (droppedTagCount > 0) {
             dropParts.push(droppedTagCount + ' 个非法标签');
         }
         if (droppedStatementCount > 0) {
             dropParts.push(droppedStatementCount + ' 条非法语句');
+        }
+        if (droppedRecycleBinCount > 0) {
+            dropParts.push(droppedRecycleBinCount + ' 条非法回收站条目');
         }
         message += '（已忽略 ' + dropParts.join('、') + '）';
     }
@@ -1566,7 +1836,11 @@ function handleOpenAbout() {
 /**
  * 设置面板 → 切换某个设置项
  *
- * 【M3 修复】dispatch 返回 false 时，区分"幂等"与"命令被拒"。
+ * 【区分"幂等"与"命令被拒"】
+ *   dispatch 返回 false 时有两种情况：
+ *     · 幂等：命令执行了但值未变化
+ *     · 命令被拒：前置条件不满足
+ *   读取最新 vault 判定是哪种情况。
  */
 function handleSettingsToggle(key, nextValue) {
     if (key === 'enableInitialsSearch') {
@@ -1594,9 +1868,9 @@ function handleSettingsToggle(key, nextValue) {
 /**
  * 从回收站恢复单条
  *
- * 【本轮重构 · 分类分组接线】
+ * 【select-tag 分类分组接线】
  *   当源标签已删除时，需要打开 select-tag 模态框选择目标标签。
- *   此处新增 categories 参数，使标签按分类分组显示。
+ *   此处传入 categories 参数，使标签按分类分组显示。
  */
 async function handleRecycleRestoreSingle(binId) {
     const vault = getVaultSnapshot();
@@ -1644,7 +1918,6 @@ async function handleRecycleRestoreSingle(binId) {
         title: '源标签已删除，选择恢复的目标标签',
         tags: vault.tags,
         counts: counts,
-        // 【本轮新增】传递分类列表，触发分组渲染
         categories: vault.categories,
         excludeTagId: null
     });
@@ -1676,8 +1949,8 @@ async function handleRecycleRestoreSingle(binId) {
 /**
  * 从回收站批量恢复
  *
- * 【本轮重构 · 分类分组接线】
- *   openSelectTagModal 新增 categories 参数，使目标标签按分类分组显示。
+ * 【select-tag 分类分组接线】
+ *   openSelectTagModal 传入 categories 参数，使目标标签按分类分组显示。
  */
 async function handleRecycleRestoreBatch(binIds) {
     if (!Array.isArray(binIds) || binIds.length === 0) return false;
@@ -1699,7 +1972,6 @@ async function handleRecycleRestoreBatch(binIds) {
         title: '选择批量恢复的目标标签',
         tags: vault.tags,
         counts: counts,
-        // 【本轮新增】传递分类列表，触发分组渲染
         categories: vault.categories,
         excludeTagId: null
     });
