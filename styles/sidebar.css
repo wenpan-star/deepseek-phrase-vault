@@ -6,7 +6,7 @@
    折叠/展开的响应式显示逻辑全部基于 .sidebar.expanded 与 hover 状态
    ========================================================================
  *
- * 【本次重构 · 分类层级】
+ * 【分类层级】
  *   侧边栏结构从"平铺标签"重构为"分类分组 → 标签"的二级结构。
  *
  *   DOM 结构：
@@ -24,13 +24,42 @@
  *     .category-group.collapsed .category-children { display: none; }
  *     由 sidebar.js 通过 DOM 类切换控制，无 JS 重绘。
  *
- *   折叠视觉反馈：
- *     展开 → .category-folder-icon 显示 fa-folder-open（打开状态）
- *     折叠 → .category-folder-icon 显示 fa-folder（关闭状态）
- *
  *   窄条模式（sidebar 未展开且未 hover）：
  *     分类标题隐藏，标签缩进取消，所有标签图标平铺显示。
- *     折叠状态仍然生效：折叠分类下的标签不显示。
+ *
+ * 【本轮调整 · 视觉层级优化】
+ *
+ *   问题：用户反映侧边栏"看着眼睛疼"。
+ *
+ *   根因：
+ *     .category-name 与 .tag-name 使用同字号（--font-size-base）
+ *     同颜色（--color-text-secondary），仅字重差 100（600 vs 500）。
+ *     中文字符的 600 vs 500 视觉差异极小，导致"分类"与"标签"
+ *     在扫视时无层级，用户需要逐行读取而非"按结构跳读"，
+ *     造成视觉疲劳。
+ *
+ *   调整策略：
+ *     1. 字号拉开：分类标题降到 --font-size-sm（0.8rem），
+ *        标签名提升到 --font-size-md（0.9rem），差 0.1rem = 1.6px
+ *     2. 颜色拉开：分类标题用 --color-text-muted（比 secondary 更轻）
+ *     3. 缩进加深：.category-children 的 padding-left 从
+ *        --space-4（12px）提到 --space-5（16px），
+ *        层级缩进更明显
+ *
+ *   与 sidebar 一贯设计语言的兼容性：
+ *     sidebar 是"结构浏览"视图，分类是主视觉元素、标签是次视觉
+ *     元素。因此分类标题应比标签名更"沉稳"（字重 semibold），
+ *     而标签名应比分类标题更"醒目"（字号更大）。
+ *
+ *     调整后：
+ *       分类标题：0.8rem + semibold + muted 色 → 沉稳、结构感
+ *       标签名  ：0.9rem + medium  + secondary 色 → 醒目、可读
+ *     视觉层级清晰，用户扫视时"看到分类 → 聚焦到标签"。
+ *
+ *   与 select-tag 模态框的一致性：
+ *     select-tag 是"选择操作流"视图，分类是辅助、标签是目标。
+ *     因此 select-tag 的分类标题比标签名更"轻"（视觉权重服从
+ *     用户任务）。二者在语境上的差异是有意设计，不是不一致。
  * ======================================================================== */
 
 /* ---------- 侧边栏头部 ---------- */
@@ -143,12 +172,27 @@
     color: var(--color-primary);
 }
 
-/* 分类名 */
+/* 分类名
+ *
+ * 【本轮调整】
+ *   font-size: base → sm（0.85 → 0.8rem）
+ *   color:     secondary → muted（#2c4c6c → #5b7e9e）
+ *
+ *   调整原因：
+ *     与 .tag-name 拉开字号差（0.8 vs 0.9 = 1.6px）和颜色差
+ *     （muted vs secondary），建立清晰的视觉层级。
+ *
+ *   为什么用更轻的颜色而非更重的颜色：
+ *     分类是"结构导航"信息，用户扫视时只需要"知道这里有分类"，
+ *     不需要"逐字读分类名"。稍轻的颜色让分类标题"退到背景"，
+ *     用户的注意力自然落到更醒目的标签名上。
+ *     这与"用户任务：找标签"的心智模型一致。
+ */
 .category-name {
     flex: 1;
     font-weight: var(--font-weight-semibold);
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     /* 窄条模式下隐藏（由 .sidebar:not(.expanded) 选择器控制） */
@@ -160,7 +204,12 @@
     display: block;
 }
 
-/* 分类徽章：显示该分类下的标签数量 */
+/* 分类徽章：显示该分类下的标签数量
+ *
+ * 【本轮调整】
+ *   字号来自 --font-size-xs（tokens 中 0.7 → 0.75rem）。
+ *   无需在本文件中改动——tokens 值的变化自动生效。
+ */
 .category-badge {
     background: #e2ebf3;
     border-radius: var(--radius-pill-sm);
@@ -216,15 +265,29 @@
     display: inline-block;
 }
 
-/* ---------- 分类子级容器（标签列表） ---------- */
+/* ---------- 分类子级容器（标签列表）
+ *
+ * 【本轮调整】
+ *   padding-left: --space-4（12px）→ --space-5（16px）
+ *
+ *   调整原因：
+ *     12px 缩进下，分类标题与标签项的视觉左边缘过于接近，
+ *     用户扫视时"分类标题的文件夹图标"和"标签的色点"在
+ *     视觉上属于同一列，层级关系不清晰。
+ *     16px 缩进让标签项明显"从属于"分类标题，层级一目了然。
+ *
+ *   与其他缩进的协调：
+ *     · select-tag 的分组缩进也是 16px（--space-4 在该语境下
+ *       的语义化取值）
+ *     · 侧边栏内其他缩进（.tags-scroll 的 10px 左右）与本次调整
+ *       无关，不受影响
+ */
 .category-children {
-    /* 层级缩进：让标签在视觉上"从属于"分类 */
-    padding-left: 12px;
-    /* 折叠动画：使用 max-height 只能处理固定高度，改用 display 简单可靠 */
+    padding-left: var(--space-5);
 }
 
 /* ============================================================================
- * 单个标签项（保持原有样式，新增层级缩进后微调）
+ * 单个标签项
  * ============================================================================ */
 
 .tag-item {
@@ -286,11 +349,25 @@
     text-align: center;
 }
 
-/* ---------- 标签名 ---------- */
+/* ---------- 标签名
+ *
+ * 【本轮调整】
+ *   font-size: base → md（0.85 → 0.9rem）
+ *
+ *   调整原因：
+ *     与分类标题（sm = 0.8rem）拉开差 0.1rem = 1.6px，
+ *     加上颜色差异（secondary vs muted），视觉层级清晰。
+ *
+ *   为什么提升标签名而非降低分类标题：
+ *     用户任务是"找标签"。标签名是"目的地"，应该醒目；
+ *     分类标题是"路标"，可以稍轻。
+ *     提升标签名同时提升可读性（0.9rem = 14.4px 是舒适阅读区），
+ *     一举两得。
+ */
 .tag-name {
     flex: 1;
     font-weight: var(--font-weight-medium);
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-md);
     color: var(--color-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -302,7 +379,12 @@
     display: block;
 }
 
-/* ---------- 计数徽章（标签下语句数） ---------- */
+/* ---------- 计数徽章（标签下语句数）
+ *
+ * 【本轮调整】
+ *   字号来自 --font-size-xs（tokens 中 0.7 → 0.75rem）。
+ *   无需在本文件中改动——tokens 值的变化自动生效。
+ */
 .tag-badge {
     background: #e2ebf3;
     border-radius: var(--radius-pill-sm);
@@ -350,15 +432,7 @@
 
 /* ============================================================================
  * 侧边栏底部按钮区
- * ============================================================================
- *
- * 【本次重构】
- *   原本只有一个"新建标签"按钮。为了支持分类的新建，
- *   新增"新建分类"按钮，两者垂直排列。
- *
- *   两个按钮共用 .add-tag-btn 类，视觉完全一致。
- *   外层 .sidebar-footer 负责垂直排列与整体间距。
- */
+ * ============================================================================ */
 .sidebar-footer {
     padding: var(--space-2) 0 var(--space-3);
     flex-shrink: 0;
@@ -407,7 +481,7 @@
     border-radius: var(--radius-pill);
 }
 
-/* 标签拖拽时的幽灵元素（与 tag-item.sortable-drag 保持视觉一致） */
+/* 标签拖拽时的幽灵元素 */
 .category-children .sortable-drag {
     opacity: 0.4;
     background: var(--color-primary-soft);
