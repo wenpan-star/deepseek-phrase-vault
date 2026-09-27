@@ -7,7 +7,7 @@
 // 【历史调整】
 //   删除 setScrollPositions 函数。
 //
-// 【方案 A（上一轮）】
+// 【方案 A 调整】
 //   1. 所有函数的返回对象补齐 recycleBin 和 settings 字段，
 //      保证 vault 顶层结构完整性。
 //   2. 移除 setInitialsSearchEnabled 函数。
@@ -15,7 +15,15 @@
 //            语义上属于"设置项变更"而非"UI 状态变更"。
 //            集中到 settings-crud.js 保持职责清晰。
 //
-// 【本轮深度审核（第二批）】
+// 【本次重构 · 分类层级】
+//   所有函数的返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+//
+//   语义澄清：本模块的"UI 状态"特指**进入 Vault 持久化的会话状态**
+//   （当前标签、搜索关键词等），这些状态跨设备也应该有意义。
+//   "分类折叠状态"属于**设备级视图偏好**（与滚动位置同性质），
+//   不进入 Vault，由 localStorage 独立键管理（详见 constants.js）。
+//
+// 【本轮深度审核（第一批 / 第二批）】
 //   本模块无需逻辑修改。
 // ========================================================================
 
@@ -36,6 +44,7 @@ export function switchTag(vault, payload) {
     if (vault.uiState.currentTagId === tagId) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,
@@ -58,6 +67,7 @@ export function setSearchKeyword(vault, payload) {
     const keyword = String(payload.keyword || '');
     if (vault.uiState.searchKeyword === keyword) return vault;
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,
@@ -76,6 +86,7 @@ export function setUseRegex(vault, payload) {
     const useRegex = Boolean(payload.useRegex);
     if (vault.uiState.useRegex === useRegex) return vault;
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,
@@ -94,6 +105,7 @@ export function setSearchScope(vault, payload) {
     const scope = payload.scope;
     if (vault.uiState.searchScope === scope) return vault;
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,
@@ -112,6 +124,7 @@ export function setSidebarExpanded(vault, payload) {
     const expanded = Boolean(payload.expanded);
     if (vault.uiState.sidebarExpanded === expanded) return vault;
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,

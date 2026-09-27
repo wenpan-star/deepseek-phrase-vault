@@ -24,7 +24,11 @@
 //     - 移除 deletedAt 超过 RECYCLE_BIN_RETENTION_DAYS 的条目
 //     - deletedAt === 0 的条目视为"无时间戳"，永久保留
 //
-// 【本轮深度审核（第二批）】
+// 【本次重构 · 分类层级】
+//   所有命令的返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+//   本模块不涉及分类逻辑本身的变更，仅做机械性补全。
+//
+// 【本轮深度审核（第一批 / 第二批）】
 //   本模块无需逻辑修改。
 // ========================================================================
 
@@ -92,6 +96,7 @@ export function restoreStatementFromRecycleBin(vault, payload) {
     });
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -170,6 +175,7 @@ export function restoreStatementsFromRecycleBin(vault, payload) {
     if (restoredStatements.length === 0) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -202,6 +208,7 @@ export function purgeStatementFromRecycleBin(vault, payload) {
     if (newRecycleBin.length === vault.recycleBin.length) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: newRecycleBin,
@@ -228,6 +235,7 @@ export function purgeStatementsFromRecycleBin(vault, payload) {
     if (newRecycleBin.length === vault.recycleBin.length) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: newRecycleBin,
@@ -248,6 +256,7 @@ export function clearRecycleBin(vault, payload) {
     if (vault.recycleBin.length === 0) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: [],
@@ -289,6 +298,7 @@ export function cleanupExpiredRecycleBinItems(vault, payload) {
     if (filtered.length === vault.recycleBin.length) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: filtered,

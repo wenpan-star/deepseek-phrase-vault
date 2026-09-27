@@ -10,7 +10,7 @@
 //   4. 新增 STORAGE_KEY_ENCRYPTED_VAULT_BACKUP（W3 数据保护）
 //   5. 删除 POPOVER_MAX_WIDTH_PX（8-3 修复）
 //
-// 【本次调整 · 方案 A】
+// 【方案 A 调整】
 //   1. 新增回收站相关常量：
 //        MAX_RECYCLE_BIN_SIZE      条数上限
 //        RECYCLE_BIN_RETENTION_DAYS 保留天数
@@ -18,6 +18,42 @@
 //   2. 新增 SETTINGS_DEFAULTS：所有设置项的默认值表。
 //      加新设置项只需在此表加一行，normalizeSettings 自动处理。
 //   3. 新增 MORE_MENU_POSITION_DELAY_MS 等交互时间参数。
+//
+// 【本次重构 · 分类层级（新增）】
+//   1. 新增分类相关常量：
+//        DEFAULT_CATEGORY_ID / DEFAULT_CATEGORY_NAME
+//          默认分类（"未分类"）的 ID 与名称。它作为所有未分类标签的
+//          兜底容器，不可被删除，也不能被重命名为空。
+//
+//   2. 新增折叠状态存储键（localStorage 独立键）：
+//        STORAGE_KEY_COLLAPSED_CATEGORIES
+//          存储"已折叠分类 id 集合"的 JSON 数组字符串。
+//          语义：键存在 = 用户主动折叠了其中列出的分类。
+//          "存储已折叠集合"而非"已展开集合"的取舍：
+//            · 新分类天然处于展开态（不在集合中）
+//            · 用户升级后行为一致（默认全部展开）
+//        COLLAPSED_CATEGORIES_SAVE_DEBOUNCE_MS
+//          写入防抖时长。用户快速折叠多个分类时只触发一次写入。
+//
+//   3. 新增分类模态框聚焦延迟：
+//        CATEGORY_MODAL_FOCUS_DELAY_MS
+//          与 TAG_MODAL_FOCUS_DELAY_MS 保持同一取值（100ms），
+//          保证两个"同类"模态框的焦点行为一致。
+//
+// 【为什么折叠状态不进 Vault】
+//   折叠状态是"这台设备上我看这个视图的习惯"，不是"数据"本身。
+//   它属于设备级视图偏好，与滚动位置同性质（滚动位置存 sessionStorage）。
+//
+//   若放进 vault.uiState：
+//     · 需要新增 setCategoryCollapsed 命令
+//     · 需要让侧边栏订阅 'ui' 切片并做增量更新
+//     · 每次折叠切换都要全量重绘侧边栏（或引入复杂的增量更新）
+//     · 引入"折叠状态跨设备同步"的伪需求
+//
+//   独立 localStorage 键：
+//     · 零命令、零切片、零 Vault 结构扰动
+//     · 折叠切换是 O(1) DOM 类切换，响应即时
+//     · 与滚动位置的存储策略完全对齐
 // ========================================================================
 
 // -------------------- 存储键 --------------------
@@ -44,6 +80,14 @@ export const STORAGE_KEY_ENCRYPTED_VAULT_BACKUP = "ds_encrypted_vault_v4_backup"
 export const SESSION_KEY_SCROLL_POSITION_PREFIX = "ds_scroll_position_v4_";
 export const SESSION_KEY_SIDEBAR_SCROLL_POSITION = "ds_sidebar_scroll_position_v4";
 
+// 分类折叠状态（localStorage 独立键，非 sessionStorage）
+// 存"已折叠分类 id 集合"的 JSON 数组字符串。
+// 与滚动位置使用 sessionStorage 不同，此处用 localStorage：
+//   - 折叠状态是跨会话保留的用户偏好（用户希望下次打开看到相同结构）
+//   - 滚动位置是瞬态恢复（下次打开回到顶部即可）
+export const STORAGE_KEY_COLLAPSED_CATEGORIES = "ds_collapsed_categories_v1";
+export const COLLAPSED_CATEGORIES_SAVE_DEBOUNCE_MS = 200;
+
 // -------------------- 加密参数 --------------------
 export const PBKDF2_ITERATIONS = 100000;
 export const ENCRYPTION_KEY_STRING = "deepseek-statement-vault-2025-v4";
@@ -57,12 +101,31 @@ export const SALT = new Uint8Array([
 export const DEFAULT_TAG_ID = "default_main_tag_001";
 export const DEFAULT_TAG_NAME = "默认语库";
 
+// -------------------- 默认分类（本次重构新增）--------------------
+// 默认分类作为所有未分类标签的兜底容器。
+//
+// 命名选择"未分类"而非"默认分类"：
+//   · "默认分类"暗示它是应用预设、有特殊地位
+//   · "未分类"明确表达"这是兜底容器"，用户没有心理负担
+//   · 删除其他分类时标签回落到这里，语义完全自洽
+//
+// ID 使用固定字符串（不用 generateUniqueId）：
+//   · 保证跨设备、跨会话稳定
+//   · 归一化时可无条件判定"默认分类是否存在"
+//   · 与 DEFAULT_TAG_ID 的设计哲学一致
+export const DEFAULT_CATEGORY_ID = "default_category_001";
+export const DEFAULT_CATEGORY_NAME = "未分类";
+
 // -------------------- 标签名称长度上限 --------------------
 // 命令层与 UI 层共用。
 // 取值依据：
 //   - 侧边栏在展开态下可用宽度约 280px
 //   - 中文字符按 14px 字号估算，20 字约占 280px，正好铺满且不换行
 //   - 20 字足以表达绝大多数标签语义
+//
+// 【本次重构说明】分类名称长度上限复用此常量，不新增。
+//   理由：分类与标签同属"组织维度名称"，长度约束的合理性完全一致；
+//         分开定义会增加不必要的维护负担（未来修改需同步两处）。
 export const MAX_TAG_NAME_LENGTH = 20;
 
 // -------------------- 预设颜色 --------------------
@@ -167,6 +230,11 @@ export const EDIT_MODAL_FOCUS_DELAY_MS = 100;
 export const ADD_STATEMENT_SCROLL_DELAY_MS = 50;
 export const TAG_MODAL_FOCUS_DELAY_MS = 100;
 export const INPUT_ERROR_SHAKE_DURATION_MS = 400;
+
+// 分类模态框聚焦延迟（本次重构新增）
+// 与 TAG_MODAL_FOCUS_DELAY_MS 保持同一取值，保证两个同类模态框
+// 的焦点行为一致：均为打开后 100ms 内将焦点置于名称输入框。
+export const CATEGORY_MODAL_FOCUS_DELAY_MS = 100;
 
 // 更多菜单打开后的位置计算延迟（等待 DOM 渲染后测量）
 // 0ms 表示下一个宏任务立即执行；使用 setTimeout(0) 而非同步，

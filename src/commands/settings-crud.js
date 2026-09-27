@@ -17,7 +17,11 @@
 //     - 若设置项影响数据行为（如 autoBackup）→ []（无 UI 影响）
 //     具体到每个命令在注册表中声明
 //
-// 【本轮深度审核（第二批）】
+// 【本次重构 · 分类层级】
+//   命令返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+//   本模块不涉及分类逻辑本身的变更，仅做机械性补全。
+//
+// 【本轮深度审核（第一批 / 第二批）】
 //   本模块无需逻辑修改。
 //   幂等语义正确：值未变化时返回原 vault 引用，
 //   让 Facade 识别为"无变化"。
@@ -45,6 +49,7 @@ export function setInitialsSearchEnabled(vault, payload) {
     if (vault.settings.enableInitialsSearch === enabled) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,

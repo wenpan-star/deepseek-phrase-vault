@@ -1,9 +1,37 @@
 /* filename: styles/sidebar.css */
 /* ========================================================================
    DeepSeek 语句工坊 · 侧边栏内部样式
-   包含：头部、Logo、标题、标签滚动区、标签项、色点、删除按钮、新建按钮
+   包含：头部、Logo、标题、分类分组、分类头部、折叠动画、
+         标签项、色点、删除按钮、底部按钮
    折叠/展开的响应式显示逻辑全部基于 .sidebar.expanded 与 hover 状态
-   ======================================================================== */
+   ========================================================================
+ *
+ * 【本次重构 · 分类层级】
+ *   侧边栏结构从"平铺标签"重构为"分类分组 → 标签"的二级结构。
+ *
+ *   DOM 结构：
+ *     #sidebarTagsList
+ *       └── .category-group[data-category-id]
+ *             ├── .category-header      ← 分类标题栏
+ *             │     ├── .category-folder-icon
+ *             │     ├── .category-name
+ *             │     ├── .category-badge
+ *             │     └── .delete-category-icon
+ *             └── .category-children    ← 标签列表容器
+ *                   └── .tag-item[data-tag-id]
+ *
+ *   折叠机制：
+ *     .category-group.collapsed .category-children { display: none; }
+ *     由 sidebar.js 通过 DOM 类切换控制，无 JS 重绘。
+ *
+ *   折叠视觉反馈：
+ *     展开 → .category-folder-icon 显示 fa-folder-open（打开状态）
+ *     折叠 → .category-folder-icon 显示 fa-folder（关闭状态）
+ *
+ *   窄条模式（sidebar 未展开且未 hover）：
+ *     分类标题隐藏，标签缩进取消，所有标签图标平铺显示。
+ *     折叠状态仍然生效：折叠分类下的标签不显示。
+ * ======================================================================== */
 
 /* ---------- 侧边栏头部 ---------- */
 .sidebar-header {
@@ -64,13 +92,147 @@
     padding: 0 10px 16px 10px;
 }
 
-/* ---------- 单个标签项 ---------- */
+/* ============================================================================
+ * 分类分组
+ * ============================================================================ */
+
+.category-group {
+    margin-bottom: var(--space-2);
+}
+
+/* 折叠状态：隐藏子标签列表 */
+.category-group.collapsed .category-children {
+    display: none;
+}
+
+/* ---------- 分类标题栏 ---------- */
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 8px 10px;
+    margin: 2px 0;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    white-space: nowrap;
+    user-select: none;
+    position: relative;
+}
+
+.category-header:hover {
+    background: var(--color-primary-tint-deep);
+}
+
+.category-header:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+}
+
+/* 分类文件夹图标 */
+.category-folder-icon {
+    width: 20px;
+    font-size: var(--font-size-lg);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    text-align: center;
+    transition: color var(--transition-fast);
+}
+
+.category-header:hover .category-folder-icon {
+    color: var(--color-primary);
+}
+
+/* 分类名 */
+.category-name {
+    flex: 1;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* 窄条模式下隐藏（由 .sidebar:not(.expanded) 选择器控制） */
+    display: none;
+}
+
+.sidebar.expanded .category-name,
+.sidebar:not(.touch-mode):not(.expanded):hover .category-name {
+    display: block;
+}
+
+/* 分类徽章：显示该分类下的标签数量 */
+.category-badge {
+    background: #e2ebf3;
+    border-radius: var(--radius-pill-sm);
+    padding: 2px 8px;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: #2c6b9a;
+    display: none;
+    flex-shrink: 0;
+}
+
+.sidebar.expanded .category-badge,
+.sidebar:not(.touch-mode):not(.expanded):hover .category-badge {
+    display: inline;
+}
+
+/* 分类删除按钮 */
+.delete-category-icon {
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    color: #8facc0;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.sidebar.expanded .delete-category-icon,
+.sidebar:not(.touch-mode):not(.expanded):hover .delete-category-icon {
+    display: inline-flex;
+}
+
+.delete-category-icon:hover {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}
+
+/* 分类删除按钮占位（默认分类不显示删除按钮，占位保持对齐） */
+.delete-category-icon-placeholder {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: none;
+}
+
+.sidebar.expanded .delete-category-icon-placeholder,
+.sidebar:not(.touch-mode):not(.expanded):hover .delete-category-icon-placeholder {
+    display: inline-block;
+}
+
+/* ---------- 分类子级容器（标签列表） ---------- */
+.category-children {
+    /* 层级缩进：让标签在视觉上"从属于"分类 */
+    padding-left: 12px;
+    /* 折叠动画：使用 max-height 只能处理固定高度，改用 display 简单可靠 */
+}
+
+/* ============================================================================
+ * 单个标签项（保持原有样式，新增层级缩进后微调）
+ * ============================================================================ */
+
 .tag-item {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    padding: 10px 12px;
-    margin: 4px 0;
+    gap: var(--space-3);
+    padding: 8px 10px;
+    margin: 2px 0;
     border-radius: var(--radius-pill);
     cursor: pointer;
     transition: all var(--transition-tag);
@@ -117,8 +279,8 @@
 
 /* ---------- 标签图标 ---------- */
 .tag-item i {
-    width: 24px;
-    font-size: var(--font-size-xl);
+    width: 20px;
+    font-size: var(--font-size-lg);
     color: var(--color-text-muted);
     flex-shrink: 0;
     text-align: center;
@@ -140,7 +302,7 @@
     display: block;
 }
 
-/* ---------- 计数徽章 ---------- */
+/* ---------- 计数徽章（标签下语句数） ---------- */
 .tag-badge {
     background: #e2ebf3;
     border-radius: var(--radius-pill-sm);
@@ -160,12 +322,12 @@
 .delete-tag-icon {
     background: rgba(0, 0, 0, 0.06);
     border-radius: 50%;
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     display: none;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
     color: #8facc0;
     transition: all var(--transition-fast);
@@ -186,9 +348,24 @@
     color: var(--color-danger);
 }
 
-/* ---------- 新建标签按钮 ---------- */
+/* ============================================================================
+ * 侧边栏底部按钮区
+ * ============================================================================
+ *
+ * 【本次重构】
+ *   原本只有一个"新建标签"按钮。为了支持分类的新建，
+ *   新增"新建分类"按钮，两者垂直排列。
+ *
+ *   两个按钮共用 .add-tag-btn 类，视觉完全一致。
+ *   外层 .sidebar-footer 负责垂直排列与整体间距。
+ */
+.sidebar-footer {
+    padding: var(--space-2) 0 var(--space-3);
+    flex-shrink: 0;
+}
+
 .add-tag-btn {
-    margin: var(--space-4) var(--space-3);
+    margin: var(--space-2) var(--space-3);
     background: var(--color-primary-tint);
     border-radius: var(--radius-pill);
     padding: var(--space-3);
@@ -217,4 +394,27 @@
 .sidebar.expanded .add-tag-btn span,
 .sidebar:not(.touch-mode):not(.expanded):hover .add-tag-btn span {
     display: inline;
+}
+
+/* ============================================================================
+ * Sortable 拖拽视觉状态
+ * ============================================================================ */
+
+/* 分类拖拽时的幽灵元素 */
+.sortable-category-drag {
+    opacity: 0.4;
+    background: var(--color-primary-soft);
+    border-radius: var(--radius-pill);
+}
+
+/* 标签拖拽时的幽灵元素（与 tag-item.sortable-drag 保持视觉一致） */
+.category-children .sortable-drag {
+    opacity: 0.4;
+    background: var(--color-primary-soft);
+}
+
+/* 拖拽中的分类分组 */
+.category-group.sortable-chosen > .category-header {
+    background: var(--color-primary-soft);
+    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15);
 }

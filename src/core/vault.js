@@ -16,7 +16,7 @@
 //   normalizeVault 静默忽略旧数据里残留的 mainListScrollTop /
 //   sidebarScrollTop 字段。
 //
-// 【方案 A（上一轮）】
+// 【方案 A 调整】
 //   1. 新增 vault.settings 命名空间：
 //        与 uiState 分离，用于存放用户偏好（跨会话持久，
 //        未来可参与"配置同步"，与"重置 UI 状态"解耦）
@@ -25,15 +25,41 @@
 //        （id / name / color）与删除时间。
 //   3. 新增 normalizeSettings / normalizeRecycleBin 两个归一化函数
 //
-// 【本轮深度审核（第一批 / 第二批）】
+// 【本次重构 · 分类层级（新增）】
+//   1. 新增 vault.categories 数组：
+//        标签的一级分组。每条记录包含 id 与 name。
+//        默认分类（DEFAULT_CATEGORY_ID = "未分类"）永远存在，
+//        作为所有未分类标签的兜底容器。
+//
+//   2. 标签新增 categoryId 字段：
+//        指向 vault.categories 中的某个分类。
+//        归一化时若 categoryId 缺失或指向不存在的分类，
+//        自动回落到 DEFAULT_CATEGORY_ID。
+//
+//   3. 新增 normalizeCategories 归一化函数。
+//
+//   4. 归一化策略：
+//        · 旧数据无 categories 字段 → 创建只含默认分类的数组，
+//          所有旧标签自动归入默认分类。用户升级后首次打开即看到
+//          "未分类"下包含全部旧标签，体验连续，无数据丢失。
+//        · 数据里 tags[].categoryId 指向已被删除的分类（例如
+//          用户手动编辑或数据被截断）→ 回落到默认分类。
+//        · 保证默认分类一定存在（不存在则在首位插入）。
+//
+//   5. 折叠状态不进 Vault（详见 constants.js 注释）。
+//      uiState 结构保持与方案 A 完全一致。
+//
+// 【本轮深度审核（第一批 / 第二批 / 第三批）】
 //   本模块无需逻辑修改。
-//   ensureDefaultTagExists 在返回对象中已正确携带 recycleBin
-//   与 settings，保持 Vault 顶层结构完整性。
+//   ensureDefaultTagExists 在返回对象中已正确携带 categories
+//   字段，保持 Vault 顶层结构完整性。
 // ========================================================================
 
 import {
     DEFAULT_TAG_ID,
     DEFAULT_TAG_NAME,
+    DEFAULT_CATEGORY_ID,
+    DEFAULT_CATEGORY_NAME,
     SEARCH_SCOPE_LOCAL,
     SEARCH_SCOPE_GLOBAL,
     PRESET_COLORS,
@@ -50,6 +76,7 @@ import { getBuiltinPreset } from '../preset.js';
  *
  * 结构：
  *   {
+ *     categories: [{ id, name }],       ← 本次重构新增
  *     tags: [],
  *     statementsMap: {},
  *     recycleBin: [],
@@ -57,10 +84,16 @@ import { getBuiltinPreset } from '../preset.js';
  *     settings: { ...用户偏好... }
  *   }
  *
- * @returns {{tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
+ * 新建时 categories 已含默认分类，保证 Vault 始终满足
+ * "至少有一个分类"的不变式。
+ *
+ * @returns {{categories: Array, tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
  */
 export function createEmptyVault() {
     return {
+        categories: [
+            { id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }
+        ],
         tags: [],
         statementsMap: {},
         recycleBin: [],
@@ -77,7 +110,12 @@ export function createEmptyVault() {
 
 /**
  * 将内置预设转为标准 Vault 结构
- * @returns {{tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
+ *
+ * 说明：preset.tags 的每一项都会被赋予 DEFAULT_CATEGORY_ID，
+ *       即所有内置标签默认归入"未分类"。
+ *       这与"旧数据自动归入默认分类"的行为保持一致。
+ *
+ * @returns {{categories: Array, tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
  */
 export function createVaultFromBuiltinPreset() {
     const preset = getBuiltinPreset();
@@ -87,7 +125,9 @@ export function createVaultFromBuiltinPreset() {
             id: tag.id,
             name: tag.name,
             // 预设中的颜色同样走白名单，防御 preset.js 被误编辑
-            color: PRESET_COLORS.includes(tag.color) ? tag.color : null
+            color: PRESET_COLORS.includes(tag.color) ? tag.color : null,
+            // 本次重构：所有预设标签默认归入"未分类"
+            categoryId: DEFAULT_CATEGORY_ID
         };
     });
     vault.statementsMap = {};
@@ -280,17 +320,92 @@ export function normalizeSettings(rawSettings) {
 }
 
 /**
+ * 归一化分类数组（本次重构新增）。
+ *
+ * 规则：
+ *   · 非数组（undefined / null / 其他类型）→ 返回只含默认分类的数组
+ *   · 每项校验 id 与 name：任一为空则丢弃
+ *   · 同 id 去重（保留首次出现的）
+ *   · 保证默认分类一定存在：
+ *       若归一化后的数组不含默认分类 → 在首位插入默认分类
+ *       （unshift 而非 push：默认分类保持在最上方，用户初次打开
+ *        即能看到"未分类"作为落点）
+ *
+ * 与标签归一化的差异：
+ *   · 分类没有颜色字段（分类不参与色点标识）
+ *   · 分类没有其他嵌套字段（保持最简结构）
+ *   · 默认分类的插入位置固定为首位（标签的默认标签固定为首位，
+ *     两者设计一致）
+ *
+ * 防御要点：
+ *   · 非对象项静默丢弃
+ *   · name 去空白后为空则丢弃（避免幽灵"空名分类"）
+ *   · 严格去重，避免同 id 多份副本造成的引用混乱
+ *
+ * @param {Array|null|undefined} rawCategories
+ * @returns {Array<{id: string, name: string}>}
+ */
+export function normalizeCategories(rawCategories) {
+    if (!Array.isArray(rawCategories)) {
+        return [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }];
+    }
+
+    const result = [];
+    const seenIds = new Set();
+
+    for (const rawCategory of rawCategories) {
+        if (!rawCategory || typeof rawCategory !== 'object') continue;
+
+        const categoryId = rawCategory.id == null
+            ? ''
+            : String(rawCategory.id).trim();
+        const categoryName = rawCategory.name == null
+            ? ''
+            : String(rawCategory.name).trim();
+
+        if (!categoryId || !categoryName) continue;
+        if (seenIds.has(categoryId)) continue;
+
+        seenIds.add(categoryId);
+        result.push({ id: categoryId, name: categoryName });
+    }
+
+    // 保证默认分类存在
+    if (!seenIds.has(DEFAULT_CATEGORY_ID)) {
+        result.unshift({
+            id: DEFAULT_CATEGORY_ID,
+            name: DEFAULT_CATEGORY_NAME
+        });
+    }
+
+    return result;
+}
+
+/**
  * 归一化完整 Vault：补全所有缺失字段，剔除非法数据
  *
  * 向后兼容说明：
  *   旧版本数据可能在 uiState 中包含 mainListScrollTop / sidebarScrollTop，
  *   也可能完全缺少 recycleBin / settings 字段。
+ *   本次重构又新增了 categories 字段。
  *   本函数静默处理所有这些差异，保证从任意历史版本升级都不会失败。
  *
  * @param {Object} rawVault
  * @returns {Object}
  */
 export function normalizeVault(rawVault) {
+    // ---------- 分类归一化（本次重构新增）----------
+    // 顺序很重要：先归一化分类，再归一化标签，
+    // 因为标签的 categoryId 需要参照分类名单校验。
+    const normalizedCategories = normalizeCategories(
+        rawVault && rawVault.categories
+    );
+    const knownCategoryIds = new Set(
+        normalizedCategories.map(function (category) {
+            return category.id;
+        })
+    );
+
     // ---------- 标签归一化 ----------
     const rawTags = Array.isArray(rawVault && rawVault.tags) ? rawVault.tags : [];
     const normalizedTags = [];
@@ -303,9 +418,25 @@ export function normalizeVault(rawVault) {
         if (!tagId || !tagName) continue;
         if (knownTagIds.has(tagId)) continue;
         knownTagIds.add(tagId);
+
         // 颜色白名单：仅接受预设调色板中的颜色
         const tagColor = PRESET_COLORS.includes(rawTag.color) ? rawTag.color : null;
-        normalizedTags.push({ id: tagId, name: tagName, color: tagColor });
+
+        // 分类归属校验：非法或缺失时回落到默认分类
+        // （旧数据无 categoryId 字段 → 自动归入"未分类"）
+        const rawCategoryId = rawTag.categoryId == null
+            ? ''
+            : String(rawTag.categoryId).trim();
+        const tagCategoryId = knownCategoryIds.has(rawCategoryId)
+            ? rawCategoryId
+            : DEFAULT_CATEGORY_ID;
+
+        normalizedTags.push({
+            id: tagId,
+            name: tagName,
+            color: tagColor,
+            categoryId: tagCategoryId
+        });
     }
 
     // ---------- statementsMap 归一化 ----------
@@ -352,6 +483,8 @@ export function normalizeVault(rawVault) {
 
     // 注意：这里不再读取 rawUiState.mainListScrollTop / sidebarScrollTop。
     //       即使旧数据包含它们，也会被静默忽略（不报错、不迁移）。
+    //       本次重构同样不读取任何"折叠状态"字段——
+    //       折叠状态由 localStorage 独立键管理，与 Vault 完全解耦。
     const normalizedUiState = {
         currentTagId: normalizedCurrentTagId,
         sidebarExpanded: Boolean(rawUiState.sidebarExpanded),
@@ -368,6 +501,7 @@ export function normalizeVault(rawVault) {
     );
 
     return {
+        categories: normalizedCategories,
         tags: normalizedTags,
         statementsMap: normalizedStatementsMap,
         recycleBin: normalizedRecycleBin,
@@ -377,27 +511,97 @@ export function normalizeVault(rawVault) {
 }
 
 /**
- * 确保默认标签存在且名称正确；确保 currentTagId 合法
+ * 确保默认分类与默认标签存在；确保 currentTagId 合法；
+ * 确保每个标签的 categoryId 合法。
+ *
+ * 【本次重构】
+ *   1. 函数名保持（不破坏现有调用方），但职责扩展为同时保证
+ *      默认分类和默认标签。
+ *   2. 返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+ *
+ * 【幂等性】
+ *   若一切正常（默认分类存在、默认标签存在、categoryId 都合法、
+ *   currentTagId 合法），返回原 vault 引用。
+ *   否则返回新对象。
+ *
  * @param {Object} vault
- * @returns {Object} 新的 vault
+ * @returns {Object} 新的 vault（或原 vault 引用）
  */
 export function ensureDefaultTagExists(vault) {
-    const tags = vault.tags.slice();
-    const statementsMap = { ...vault.statementsMap };
+    // ---------- 分类保障 ----------
+    let categories = Array.isArray(vault.categories)
+        ? vault.categories.slice()
+        : [];
     let modified = false;
 
-    const defaultIndex = tags.findIndex(function (tag) {
+    // 保证默认分类存在（首位）
+    if (categories.length === 0) {
+        categories = [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }];
+        modified = true;
+    } else {
+        const defaultCategoryIndex = categories.findIndex(function (category) {
+            return category.id === DEFAULT_CATEGORY_ID;
+        });
+        if (defaultCategoryIndex === -1) {
+            categories.unshift({
+                id: DEFAULT_CATEGORY_ID,
+                name: DEFAULT_CATEGORY_NAME
+            });
+            modified = true;
+        } else if (categories[defaultCategoryIndex].name !== DEFAULT_CATEGORY_NAME) {
+            // 默认分类名被意外修改 → 恢复为规定名称
+            const updatedCategories = categories.slice();
+            updatedCategories[defaultCategoryIndex] = {
+                ...updatedCategories[defaultCategoryIndex],
+                name: DEFAULT_CATEGORY_NAME
+            };
+            categories = updatedCategories;
+            modified = true;
+        }
+    }
+
+    const knownCategoryIds = new Set(
+        categories.map(function (category) {
+            return category.id;
+        })
+    );
+
+    // ---------- 标签保障 ----------
+    const tags = vault.tags.slice();
+    const statementsMap = { ...vault.statementsMap };
+
+    const defaultTagIndex = tags.findIndex(function (tag) {
         return tag.id === DEFAULT_TAG_ID;
     });
-    if (defaultIndex === -1) {
-        tags.unshift({ id: DEFAULT_TAG_ID, name: DEFAULT_TAG_NAME, color: null });
+    if (defaultTagIndex === -1) {
+        tags.unshift({
+            id: DEFAULT_TAG_ID,
+            name: DEFAULT_TAG_NAME,
+            color: null,
+            categoryId: DEFAULT_CATEGORY_ID
+        });
         if (!statementsMap[DEFAULT_TAG_ID]) {
             statementsMap[DEFAULT_TAG_ID] = [];
         }
         modified = true;
-    } else if (tags[defaultIndex].name !== DEFAULT_TAG_NAME) {
-        tags[defaultIndex] = { ...tags[defaultIndex], name: DEFAULT_TAG_NAME };
+    } else if (tags[defaultTagIndex].name !== DEFAULT_TAG_NAME) {
+        tags[defaultTagIndex] = {
+            ...tags[defaultTagIndex],
+            name: DEFAULT_TAG_NAME
+        };
         modified = true;
+    }
+
+    // 保证所有标签的 categoryId 合法（指向存在的分类）
+    for (let tagIndex = 0; tagIndex < tags.length; tagIndex++) {
+        const tagCategoryId = tags[tagIndex].categoryId;
+        if (!tagCategoryId || !knownCategoryIds.has(tagCategoryId)) {
+            tags[tagIndex] = {
+                ...tags[tagIndex],
+                categoryId: DEFAULT_CATEGORY_ID
+            };
+            modified = true;
+        }
     }
 
     // 每个标签都必须有语句数组
@@ -408,7 +612,7 @@ export function ensureDefaultTagExists(vault) {
         }
     }
 
-    // currentTagId 合法性
+    // ---------- uiState 保障 ----------
     const uiState = { ...vault.uiState };
     if (!uiState.currentTagId || !tags.some(function (tag) {
         return tag.id === uiState.currentTagId;
@@ -418,7 +622,9 @@ export function ensureDefaultTagExists(vault) {
     }
 
     if (!modified) return vault;
+
     return {
+        categories: categories,
         tags: tags,
         statementsMap: statementsMap,
         recycleBin: vault.recycleBin,
@@ -531,4 +737,42 @@ export function isDuplicateInTag(vault, tagId, text, excludeStatementId = null) 
  */
 export function countStatementsInTag(vault, tagId) {
     return (vault.statementsMap[tagId] || []).length;
+}
+
+/**
+ * 统计某分类下的标签数（本次重构新增）
+ *
+ * 供侧边栏渲染分类徽章使用：
+ *   · 分类徽章显示"该分类下的标签数量"，而非"语句总数"
+ *   · 理由：分类的直接子项是标签，用标签数描述分类的"容量"最直观
+ *
+ * @param {Object} vault
+ * @param {string} categoryId
+ * @returns {number}
+ */
+export function countTagsInCategory(vault, categoryId) {
+    if (!categoryId) return 0;
+    if (!Array.isArray(vault.tags)) return 0;
+    return vault.tags.filter(function (tag) {
+        return tag.categoryId === categoryId;
+    }).length;
+}
+
+/**
+ * 获取指定分类下的标签列表（本次重构新增）
+ *
+ * 保持 vault.tags 数组的原有顺序，不重新排序。
+ * 侧边栏渲染时直接使用，保证"标签在分类内的相对顺序"
+ * 与"vault.tags 数组顺序"严格一致。
+ *
+ * @param {Object} vault
+ * @param {string} categoryId
+ * @returns {Array}
+ */
+export function getTagsInCategory(vault, categoryId) {
+    if (!categoryId) return [];
+    if (!Array.isArray(vault.tags)) return [];
+    return vault.tags.filter(function (tag) {
+        return tag.categoryId === categoryId;
+    });
 }

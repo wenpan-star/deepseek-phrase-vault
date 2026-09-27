@@ -2,9 +2,20 @@
 /* ========================================================================
    DeepSeek 语句工坊 · 模态框样式
    包含：通用模态框外壳、卡片、颜色选择器、标签选择列表、确认对话框、
-         设置面板、回收站面板
+         设置面板、回收站面板、分类/标签模态框的表单元素
    所有模态框 HTML 由 views/modals/*.js 动态注入，本文件只定义样式
-   ======================================================================== */
+   ========================================================================
+ *
+ * 【本次重构 · 分类层级】
+ *   新增表单元素样式：
+ *     · .form-label    表单项标签（如"所属分类"）
+ *     · .form-select   下拉选择器（用于标签模态框的分类下拉）
+ *
+ *   为什么需要独立的 select 样式：
+ *     原本 select 元素在 modal-card 内无样式，浏览器默认样式
+ *     与项目的"圆润卡片"设计语言不匹配。
+ *     新增样式使其与 input[type="text"] 视觉一致。
+ * ======================================================================== */
 
 /* ---------- 通用外壳 ---------- */
 .modal {
@@ -83,11 +94,9 @@
 
 /* 编辑语句模态框
  *
- * 【本次重构】尺寸改为动态计算：
+ * 尺寸改为动态计算：
  *   width  = var(--modal-card-width-edit-dynamic)
- *          = （序号左边缘 → 按钮区左边缘 的距离）× 2/3
  *   height = var(--modal-card-height-edit-dynamic)
- *          = 视口高度 × 1/2
  *
  * 具体计算逻辑见 src/views/modals/edit.js 的
  * computeAndApplyEditModalSize() 函数。
@@ -105,6 +114,18 @@
 
 /* 标签模态框（新建 / 编辑标签） */
 #tagModal .modal-card {
+    max-width: var(--modal-card-width-tag);
+    max-height: var(--modal-card-max-height-tag);
+}
+
+/* 分类模态框（新建 / 重命名分类，本次重构新增）
+ *
+ * 尺寸与标签模态框一致（同为 480px 宽度），
+ * 因为二者内容结构相似（名称输入 + 附加选项）。
+ * 分类模态框无颜色选择器，高度会更小，但保持相同的最大高度限制
+ * 以便未来扩展时无需修改样式。
+ */
+#categoryModal .modal-card {
     max-width: var(--modal-card-width-tag);
     max-height: var(--modal-card-max-height-tag);
 }
@@ -219,14 +240,78 @@
 }
 
 /* ========================================================================
+   表单元素（本次重构新增）
+   ========================================================================
+ *
+ * 用于标签模态框的"所属分类"下拉选择器。
+ *
+ * 视觉与 input[type="text"] 保持一致：
+ *   · 相同的圆角（--radius-pill）、内边距、边框色
+ *   · 相同的聚焦态（主色边框 + 淡色外阴影）
+ *
+ * 差异：
+ *   · 使用 appearance: none 移除浏览器默认样式
+ *   · 通过 background-image 注入自定义下拉箭头（data URI SVG）
+ *   · padding-right 加大，为箭头留出空间
+ */
+
+/* 表单项标签（如"所属分类"） */
+.form-label {
+    display: block;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    margin: 0 0 var(--space-2) 0;
+    flex-shrink: 0;
+}
+
+/* 下拉选择器 */
+.form-select {
+    width: 100%;
+    margin: 0 0 var(--space-4) 0;
+    padding: var(--space-3) var(--space-8) var(--space-3) var(--space-4);
+    border-radius: var(--radius-pill);
+    border: 1px solid #ccc;
+    font-size: var(--font-size-md);
+    font-family: inherit;
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    transition: border-color var(--transition-fast);
+    box-sizing: border-box;
+    flex-shrink: 0;
+    cursor: pointer;
+
+    /* 移除浏览器默认下拉箭头 */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+
+    /* 注入自定义下拉箭头（内联 SVG data URI） */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235b7e9e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-4) center;
+}
+
+.form-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.08);
+    outline: none;
+}
+
+.form-select:hover {
+    border-color: var(--color-border-strong);
+}
+
+/* ========================================================================
    输入校验失败反馈
    ========================================================================
  *
- * 由 views/modals/edit.js 与 views/modals/tag.js 中的
- * triggerInputErrorFeedback 函数动态添加 .input-error 类触发。
+ * 由 views/modals/edit.js、views/modals/tag.js、
+ * views/modals/category.js 中的 triggerInputErrorFeedback 函数
+ * 动态添加 .input-error 类触发。
  *
  * 使用场景：
- *   用户在编辑语句/标签时点击"保存/确定"，但输入为空。
+ *   用户在编辑语句/标签/分类时点击"保存/确定"，但输入为空。
  *   之前的实现是静默 focus 无任何可见反馈，用户会误以为按钮坏了。
  *
  * 效果：

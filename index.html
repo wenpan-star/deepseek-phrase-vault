@@ -55,7 +55,7 @@
     <link rel="stylesheet" href="./styles/modals.css">
     <link rel="stylesheet" href="./styles/toast.css">
     <link rel="stylesheet" href="./styles/icons.css">
-    <!-- 方案 A 新增：更多菜单样式 -->
+    <!-- 方案 A：更多菜单样式 -->
     <link rel="stylesheet" href="./styles/more-menu.css">
     <!-- Sortable.js 锁定版本（避免 @latest 未来不兼容更新） -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
@@ -68,8 +68,27 @@
             <div class="sidebar-title">语料标签</div>
         </div>
         <div class="tags-scroll" id="sidebarTagsList" role="list"></div>
-        <div class="add-tag-btn" id="sidebarAddTagBtn" role="button" tabindex="0" aria-label="新建标签">
-            <i class="fas fa-plus-circle" aria-hidden="true"></i><span>新建标签</span>
+        <!--
+            侧边栏底部操作按钮区
+
+            【本次重构 · 分类层级】
+              原本只有一个"新建标签"按钮。为了支持分类的新建，
+              新增"新建分类"按钮，两者垂直排列。
+
+            交互：
+              · 点击"新建标签" → 打开标签模态框（现有行为）
+              · 点击"新建分类" → 打开分类模态框（新增）
+
+            样式：
+              两个按钮共用 .add-tag-btn 类，保证视觉一致。
+        -->
+        <div class="sidebar-footer">
+            <div class="add-tag-btn" id="sidebarAddTagBtn" role="button" tabindex="0" aria-label="新建标签">
+                <i class="fas fa-plus-circle" aria-hidden="true"></i><span>新建标签</span>
+            </div>
+            <div class="add-tag-btn" id="sidebarAddCategoryBtn" role="button" tabindex="0" aria-label="新建分类">
+                <i class="fas fa-folder-plus" aria-hidden="true"></i><span>新建分类</span>
+            </div>
         </div>
     </aside>
     <main class="main-content">
@@ -105,7 +124,7 @@
                 <button class="btn btn-outline" id="resetDefaultBtn" type="button">
                     <i class="fas fa-lightbulb" aria-hidden="true"></i> 重置全局
                 </button>
-                <!-- 方案 A 新增：更多菜单按钮 -->
+                <!-- 方案 A：更多菜单按钮 -->
                 <button class="btn btn-outline" id="moreMenuBtn" type="button"
                         aria-haspopup="menu" aria-expanded="false" aria-label="更多操作">
                     <i class="fas fa-ellipsis-h" aria-hidden="true"></i> 更多

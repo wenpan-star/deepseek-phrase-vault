@@ -13,7 +13,13 @@
 //     - 所有条目都记录来源标签快照
 //     - 统一截断到 MAX_RECYCLE_BIN_SIZE
 //
-// 【本轮深度审核（第二批）】
+// 【本次重构 · 分类层级】
+//   所有命令的返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+//   本模块不涉及分类逻辑本身的变更，仅做机械性补全。
+//
+//   详见 statement-crud.js 中的完整性说明。
+//
+// 【本轮深度审核（第一批 / 第二批）】
 //   本模块无需逻辑修改。
 // ========================================================================
 
@@ -87,6 +93,7 @@ export function batchDeleteStatements(vault, payload) {
         .slice(0, MAX_RECYCLE_BIN_SIZE);
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: newStatementsMap,
         recycleBin: newRecycleBin,
@@ -172,6 +179,7 @@ export function batchMoveStatements(vault, payload) {
     }
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: newStatementsMap,
         recycleBin: vault.recycleBin,
@@ -200,6 +208,7 @@ export function copyStatementToTag(vault, payload) {
     };
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -245,6 +254,7 @@ export function reorderStatementsInTag(vault, payload) {
     list.splice(toIndex, 0, movedItem);
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -284,6 +294,7 @@ export function incrementCopyCount(vault, payload) {
                 copyCount: nextCopyCount
             };
             return {
+                categories: vault.categories,
                 tags: vault.tags,
                 statementsMap: {
                     ...vault.statementsMap,

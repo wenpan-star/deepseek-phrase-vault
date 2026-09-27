@@ -48,135 +48,56 @@
 //   问题 A（快速切标签时滚动位置丢失）：
 //     handleTagClick 在 dispatch('switchTag') 之前调用
 //     flushScrollPosition()，把防抖窗口内待保存的滚动位置立即落盘。
-//     与 statement-list.js 中"scroll 事件记录上下文键"的修复形成双保险。
 //
 //   问题 B（批量恢复被取消时选中集被清空）：
 //     handleRecycleRestoreBatch / handleRecyclePurgeBatch /
-//     handleRecycleClearAll 显式返回 boolean：
-//       · 返回 true  = 操作已执行（可能部分成功）
-//       · 返回 false = 用户主动取消，未执行任何操作
-//     与 recycle-bin-modal.js 的返回值判断逻辑对齐。
+//     handleRecycleClearAll 显式返回 boolean。
 //
 //   问题 C（导入后侧边栏展开状态失同步）：
-//     · subscribe('ui') 中调用 syncSidebarExpandedState，
-//       把 vault.uiState.sidebarExpanded 的权威值同步到 sidebar.js。
-//     · 该调用是幂等的（值相同时立即返回），无副作用。
+//     subscribe('ui') 中调用 syncSidebarExpandedState。
 //
 // 【第二批重构（历史）】
-//   问题 I（bootstrap 未处理 initializeFacade 返回 null）：
-//     FA-4 修复后，initializeFacade 在 loadVaultFromStorage 抛异常时
-//     会返回 null（而非抛异常）。但 bootstrap 未检查返回值，直接
-//     继续执行 initializeAllViews，而 initializeAllViews 内部第一行
-//     就是 getVaultSnapshot().uiState.sidebarExpanded——会在 null 上
-//     抛 TypeError，被 bootstrap().catch 捕获后只显示"应用启动失败"，
-//     掩盖真实根因（数据加载失败 vs 其他异常）。
-//
-//     修复：
-//       · bootstrap 中检查返回值
-//       · 为 null 时：记录明确错误日志 + 用户提示 + 提前返回
-//       · 不执行后续初始化（不注册命令、不初始化视图、不渲染）
-//
-//     为什么不自动回退到内置预设：
-//       若加载失败是因为存储损坏（例如 localStorage 读取异常、
-//       解密失败但 persist.js 未识别），自动回退并用预设覆盖会
-//       丢失备份键 ds_encrypted_vault_v4_backup 中的原始数据。
-//       让用户主动刷新 / 联系支持是更保守的选择。
-//
-//   问题 M（剪贴板降级的 console.warn 刷屏）：
-//     在 HTTP 上下文中（例如本地 http://localhost 之外的开发环境、
-//     企业内网非 HTTPS 部署），navigator.clipboard.writeText 每次
-//     调用都会失败。原实现每次失败都 console.warn，用户长时间使用
-//     会积累大量重复日志。
-//
-//     修复：增加模块级布尔标志 hasLoggedModernClipboardFailure。
-//     仅在本会话首次失败时 warn（保留完整信息，含 Error 对象），
-//     后续调用静默降级。这属于"日志降噪"而非"删除日志"——
-//     首次 warn 完整保留，开发者仍可在控制台第一时间看到问题。
-//
-//     为什么不改用 console.debug：
-//       console.debug 在 Chrome DevTools 默认过滤级别下不显示，
-//       会让开发者错过诊断信息。用"首次 warn"策略兼顾两者。
+//   问题 I（bootstrap 未处理 initializeFacade 返回 null）
+//   问题 M（剪贴板降级的 console.warn 刷屏）
 //
 // 【第三批重构（历史）】
-//   问题 · computeVisibleCount 缺失（阻塞级）：
-//     症状：
-//       运行时报 ReferenceError: computeVisibleCount is not defined
-//       位置：renderAll → updateHeaderStats(computeVisibleCount())
-//       后果：bootstrap 阶段的首次 renderAll 即抛错，
-//             应用卡在"已加载但未初始化"状态，用户看到"应用启动失败"。
+//   问题 · computeVisibleCount 缺失（阻塞级）
 //
-//     根因：
-//       computeVisibleCount 曾被定义于本文件，但在某次编辑中丢失。
-//       同时保留的 import { matchSearch } from './commands/search.js'
-//       成为死引用（未使用），这是编辑事故的间接证据。
+// 【第四批重构（历史）】
+//   问题 · 编辑事故遗留的两个死引用（源码卫生）
 //
-//     深层问题：
-//       本文件中 computeVisibleCount 的职责（"计算当前可见语句数"）
-//       与 views/statement-list.js 中 renderStatementList 里的可见集
-//       计算逻辑完全重叠，历史上是两处独立实现。这种双实现结构
-//       天然脆弱，本次丢失事件正是这种脆弱性的实证。
+// 【本次重构 · 分类层级】
+//   1. 新增 import：openCategoryModal
+//      （来自 views/modals/category.js）
 //
-//     修复策略：
-//       1. 立即补回 computeVisibleCount 函数（本文件的直接改动）。
-//       2. 把可见集计算逻辑收敛为单一真相源：
-//          新增 commands/search.js 的 computeVisibleStatements(vault)
-//          纯函数，本文件与 statement-list.js 共享同一实现，
-//          从结构上消除漂移可能。
-//       3. import 层同步：
-//          移除死引用 matchSearch（未使用）；
-//          新增 computeVisibleStatements。
-//       4. computeVisibleCount 内部实现改为：
-//          委托 computeVisibleStatements(vault).statements.length，
-//          避免本文件再次成为独立的可见集算法副本。
+//   2. initializeSidebar 增加 4 个分类相关的回调：
+//        · onCategoryAdd      → handleCategoryAdd
+//        · onCategoryEdit     → handleCategoryEdit
+//        · onCategoryDelete   → handleCategoryDelete
+//        · onCategoryReorder  → handleCategoryReorder
 //
-//     兼容性保证：
-//       · 对外导出 API 完全不变（main.js 本身无对外导出）
-//       · 顶栏统计徽章的显示语义完全不变（数字 = 可见语句数）
-//       · 所有订阅 / 派发 / 事件处理逻辑逐行保留
+//   3. 新增 4 个 handlers：
+//        · handleCategoryAdd      新建分类
+//        · handleCategoryEdit     重命名分类
+//        · handleCategoryDelete   删除分类（含非空确认框）
+//        · handleCategoryReorder  重排分类顺序
 //
-// 【第四批重构（本轮）】
-//   问题 · 编辑事故遗留的两个死引用（源码卫生）：
+//   4. handleAddTag / handleTagEdit 传递分类列表给模态框：
+//        · handleAddTag：categories = vault.categories，
+//          initialCategoryId = DEFAULT_CATEGORY_ID
+//        · handleTagEdit：categories = vault.categories，
+//          initialCategoryId = tag.categoryId
+//        返回值新增 categoryId 字段，dispatch('addTag'/'editTag') 时传递
 //
-//     症状 1：import { isDuplicateInTag } from './core/vault.js';
-//       全文搜索本文件，无任何 `isDuplicateInTag(...)` 调用。
-//       所有重复检查均以内联 `.some(...)` 实现：
-//         · handleCardEdit    → vault.statementsMap[found.tagId].some(...)
-//         · handleCardCopyToTag → vault.statementsMap[targetTagId].some(...)
-//         · handleCardCopyToDefault → vault.statementsMap[DEFAULT_TAG_ID].some(...)
-//         · handleAddStatement → vault.statementsMap[currentTagId].some(...)
+//   5. handleReset / handleFullImport 的 replaceVault 调用
+//      不需要修改——normalizedVault 已包含 categories 字段
+//      （由 normalizeVault 保证），切片列表 ['tags', 'statements',
+//      'ui', 'recycleBin'] 已完整覆盖分类变更的影响面。
 //
-//     症状 2：import { SEARCH_SCOPE_GLOBAL } from './constants.js';
-//       全文搜索本文件，无任何 `SEARCH_SCOPE_GLOBAL` 使用。
-//       所有 scope 判断均直接读取 `vault.uiState.searchScope` 的值：
-//         · handleAddStatement → latestVault.uiState.searchScope
-//
-//     根因（与上一轮 matchSearch 死引用同源）：
-//       编辑中途改变了实现路径，忘记同步清理 import。
-//       起初打算：
-//         · 用 isDuplicateInTag 工具函数做重复检查 → 改成内联 `.some(...)`
-//         · 用 SEARCH_SCOPE_GLOBAL 常量做比较  → 改成"值即真相"直接比对
-//       但保留的 import 未被同步移除。
-//
-//     为什么不"留着也无害"：
-//       · 可维护性下降：未来维护者看到 import 会误以为本文件用了工具
-//         函数，读代码时在内联实现处会困惑"为什么不用工具函数"。
-//       · 隐式契约腐化：保留 SEARCH_SCOPE_GLOBAL 导入但用字面量比较，
-//         暗示"存在两种 scope 处理方式"，诱导未来的不一致写法。
-//       · 同类问题已在 utils/dom.js（delegate / $$）、search-bar.js
-//         （getSearchInputValue）、more-menu.js（escapeHtml）、
-//         settings.js（escapeHtml）等模块分别清理过，本文件是收尾。
-//
-//     修复策略：
-//       · 移除 import 段中的 isDuplicateInTag
-//       · 移除 import 段中的 SEARCH_SCOPE_GLOBAL
-//       · 内联 `.some(...)` 检查全部 1:1 保留（不改为工具函数调用，
-//         避免改变代码路径、违反"不得删除/降级/弱化现有功能"约束）
-//       · vault.uiState.searchScope 的值比较全部 1:1 保留
-//
-//     兼容性保证：
-//       · 删除的 import 从未被调用，运行时行为 100% 不变
-//       · 所有函数体、常量、日志、错误处理 1:1 保留
-//       · main.js 本身无对外导出，本改动不影响任何其他模块
+//   6. beforeunload 不额外 flush 折叠状态：
+//      侧边栏折叠的防抖窗口只有 200ms，用户在窗口内刷新的概率极低，
+//      且折叠状态丢失的影响极小（下次打开分类全部展开）。
+//      为保持主流程简洁，不引入额外的 flush 调用。
 // ========================================================================
 
 import {
@@ -192,6 +113,7 @@ import { isCryptoAvailable } from './core/crypto.js';
 import { registerAllCommands } from './commands/index.js';
 import {
     DEFAULT_TAG_ID,
+    DEFAULT_CATEGORY_ID,
     SESSION_KEY_SIDEBAR_SCROLL_POSITION,
     SCROLL_SAVE_DEBOUNCE_MS,
     ADD_STATEMENT_SCROLL_DELAY_MS,
@@ -214,6 +136,7 @@ import { initializeToast, showMessage } from './views/toast.js';
 import { showConfirmDialog } from './views/modals/confirm.js';
 import { openEditModal } from './views/modals/edit.js';
 import { openTagModal } from './views/modals/tag.js';
+import { openCategoryModal } from './views/modals/category.js';
 import { openSelectTagModal } from './views/modals/select-tag.js';
 import { openSettingsModal } from './views/modals/settings.js';
 import { openRecycleBinModal } from './views/modals/recycle-bin-modal.js';
@@ -357,19 +280,6 @@ async function copyTextToClipboard(text) {
  *     1. 检查 initializeFacade 返回值
  *     2. 为 null 时：记录明确的错误日志 + 用户提示 + 提前返回
  *     3. 不执行后续初始化（不注册命令、不初始化视图、不渲染）
- *
- *   为什么不自动回退到内置预设：
- *     若加载失败是因为存储损坏（例如 localStorage 读取异常、
- *     解密失败但 persist.js 未识别、vault 结构严重损坏），
- *     自动回退并用预设覆盖会丢失备份键
- *     ds_encrypted_vault_v4_backup 中的原始数据。
- *     让用户主动刷新 / 联系支持是更保守的选择——备份键里的
- *     密文仍然完整保留，具备人工恢复的可能性。
- *
- *   用户可见行为：
- *     · Toast 显示"应用数据加载失败，请刷新页面重试"
- *     · 页面保持"已加载但未初始化"状态
- *     · 用户手动刷新可再次尝试（可能与临时性存储异常有关）
  */
 async function bootstrap() {
     // 1. Font Awesome 异步加载，不阻塞初始化
@@ -396,9 +306,6 @@ async function bootstrap() {
             + '请检查浏览器是否禁用了本地存储。',
             true
         );
-        // 提前返回：不注册命令、不初始化视图、不渲染
-        // 保持页面在"静态 HTML 已加载，但 JS 侧未启动"状态，
-        // 用户刷新可重试
         return;
     }
 
@@ -444,7 +351,11 @@ function initializeAllViews() {
         onTagEdit: handleTagEdit,
         onTagReorder: handleTagReorder,
         onAddTag: handleAddTag,
-        onToggleExpand: handleToggleExpand
+        onToggleExpand: handleToggleExpand,
+        onCategoryAdd: handleCategoryAdd,
+        onCategoryEdit: handleCategoryEdit,
+        onCategoryDelete: handleCategoryDelete,
+        onCategoryReorder: handleCategoryReorder
     });
 
     initializeHeader({
@@ -536,21 +447,6 @@ function initializeAllViews() {
  *     本次重构把可见集计算收敛为单一真相源，本函数只做一层
  *   "取 .statements.length" 的适配，从结构上消除漂移可能。
  *
- * 【与 statement-list.js 的契约】
- *   本函数返回的数字与 renderStatementList 渲染出的卡片数严格相等。
- *   两者都从 computeVisibleStatements(vault) 获取 statements 数组，
- *   天然一致。
- *
- * 【调用时机】
- *   订阅 'statements' 与 'ui' 切片时各调用一次（每次 dispatch 后）。
- *   单次调用为 O(可见语句数)，与 renderStatementList 一致；
- *   典型规模（数千条以内）单次 < 5ms，无需跨调用缓存。
- *
- * 【防御性】
- *   computeVisibleStatements 内部已对 vault / uiState / settings
- *   缺失做防御；本函数在其返回结果上再取 .length，
- *   即使传入 null 也安全（返回 0）。
- *
  * @returns {number}
  */
 function computeVisibleCount() {
@@ -591,18 +487,6 @@ function renderAll() {
  *
  * 【第一批重构 · 问题 A】
  *   在 dispatch('switchTag') 之前先 flush 主列表的滚动位置。
- *
- *   背景：
- *     statement-list.js 的滚动保存采用 150ms 防抖。若用户在防抖
- *     窗口内切换标签，renderStatementList 会立即把 lastRenderedVault
- *     更新为新标签，导致定时器触发时用错误的上下文键写入。
- *
- *     虽然 statement-list.js 已经通过"scroll 事件记录上下文键 + 滚动
- *     位置快照"做了双重防御，但主动 flush 后，防抖窗口立即结束，
- *     不存在"待保存"的中间态，是更稳妥的双保险。
- *
- *   本调用是幂等的：若无待保存的滚动位置，persistCurrentScrollPosition
- *   内部会因无有效快照与 lastRenderedVault 状态而无操作。
  *
  * @param {string} tagId
  */
@@ -657,7 +541,9 @@ async function handleTagEdit(tagId) {
     const result = await openTagModal({
         mode: 'edit',
         initialName: tag.name,
-        initialColor: tag.color
+        initialColor: tag.color,
+        categories: vault.categories,
+        initialCategoryId: tag.categoryId
     });
     if (!result) return;
 
@@ -672,7 +558,8 @@ async function handleTagEdit(tagId) {
     const didEdit = dispatch('editTag', {
         tagId: tagId,
         name: result.name,
-        color: result.color
+        color: result.color,
+        categoryId: result.categoryId
     });
 
     if (!didEdit) {
@@ -684,21 +571,20 @@ async function handleTagEdit(tagId) {
 }
 
 function handleTagReorder(orderedIds) {
-    const didReorder = dispatch('reorderTags', { orderedIds: orderedIds });
-    if (!didReorder) {
-        // 拖拽回原位（无变化）时静默，无需提示
-    }
+    dispatch('reorderTags', { orderedIds: orderedIds });
 }
 
 async function handleAddTag() {
+    const vault = getVaultSnapshot();
     const result = await openTagModal({
         mode: 'create',
         initialName: '',
-        initialColor: null
+        initialColor: null,
+        categories: vault.categories,
+        initialCategoryId: DEFAULT_CATEGORY_ID
     });
     if (!result) return;
 
-    const vault = getVaultSnapshot();
     const isDuplicate = vault.tags.some(function (tag) {
         return tag.name.trim() === result.name.trim();
     });
@@ -709,7 +595,8 @@ async function handleAddTag() {
 
     const didAdd = dispatch('addTag', {
         name: result.name,
-        color: result.color
+        color: result.color,
+        categoryId: result.categoryId
     });
 
     if (!didAdd) {
@@ -722,6 +609,146 @@ async function handleAddTag() {
 
 function handleToggleExpand(expanded) {
     dispatch('setSidebarExpanded', { expanded: expanded });
+}
+
+// ==================== 分类事件（本次重构新增） ====================
+
+/**
+ * 新建分类
+ *
+ * 流程：
+ *   1. 打开分类模态框（mode: 'create'）
+ *   2. 校验名称重复（模态框关闭后由命令层再次校验，UI 层先给友好提示）
+ *   3. dispatch('addCategory')
+ *   4. Toast 反馈
+ */
+async function handleCategoryAdd() {
+    const result = await openCategoryModal({
+        mode: 'create',
+        initialName: ''
+    });
+    if (!result) return;
+
+    const vault = getVaultSnapshot();
+    const isDuplicate = vault.categories.some(function (category) {
+        return category.name.trim() === result.name.trim();
+    });
+    if (isDuplicate) {
+        showMessage('分类名已存在，请更换名称', true);
+        return;
+    }
+
+    const didAdd = dispatch('addCategory', { name: result.name });
+    if (!didAdd) {
+        showMessage('创建失败：名称重复或超长', true);
+        return;
+    }
+
+    showMessage('新分类已创建');
+}
+
+/**
+ * 重命名分类
+ *
+ * @param {string} categoryId
+ */
+async function handleCategoryEdit(categoryId) {
+    if (categoryId === DEFAULT_CATEGORY_ID) {
+        showMessage('默认分类名称不可修改', true);
+        return;
+    }
+
+    const vault = getVaultSnapshot();
+    const category = vault.categories.find(function (item) {
+        return item.id === categoryId;
+    });
+    if (!category) return;
+
+    const result = await openCategoryModal({
+        mode: 'edit',
+        initialName: category.name
+    });
+    if (!result) return;
+
+    const isDuplicate = vault.categories.some(function (item) {
+        return item.id !== categoryId && item.name.trim() === result.name.trim();
+    });
+    if (isDuplicate) {
+        showMessage('分类名已存在，请更换名称', true);
+        return;
+    }
+
+    const didEdit = dispatch('editCategory', {
+        categoryId: categoryId,
+        name: result.name
+    });
+
+    if (!didEdit) {
+        showMessage('分类更新失败：名称无效或已被占用', true);
+        return;
+    }
+
+    showMessage('分类已更新');
+}
+
+/**
+ * 删除分类
+ *
+ * 【确认策略】
+ *   非空分类 → 信息性确认框（提示"其下 N 个标签将移入未分类"）
+ *   空分类   → 直接删除（无确认，流畅）
+ *
+ * 【为什么"信息性确认"而非"红色警告"】
+ *   删除分类不丢数据（标签仍在，只是归属改变），
+ *   因此用中性提示而非危险警告，语义更准确。
+ */
+async function handleCategoryDelete(categoryId) {
+    if (categoryId === DEFAULT_CATEGORY_ID) {
+        showMessage('默认分类不可删除', true);
+        return;
+    }
+
+    const vault = getVaultSnapshot();
+    const category = vault.categories.find(function (item) {
+        return item.id === categoryId;
+    });
+    if (!category) return;
+
+    // 统计该分类下的标签数
+    const tagCountInCategory = vault.tags.filter(function (tag) {
+        return tag.categoryId === categoryId;
+    }).length;
+
+    // 空分类：直接删除，不弹确认框
+    if (tagCountInCategory === 0) {
+        const didDelete = dispatch('deleteCategory', { categoryId: categoryId });
+        if (didDelete) {
+            showMessage('分类已删除');
+        }
+        return;
+    }
+
+    // 非空分类：信息性确认框
+    const confirmMessage = '确定删除分类「' + category.name + '」吗？\n\n'
+        + '其下 ' + tagCountInCategory + ' 个标签将移入「未分类」。\n'
+        + '标签及其中的语句不会丢失。';
+
+    const confirmed = await showConfirmDialog(confirmMessage);
+    if (!confirmed) return;
+
+    const didDelete = dispatch('deleteCategory', { categoryId: categoryId });
+    if (didDelete) {
+        showMessage('分类已删除，' + tagCountInCategory + ' 个标签已移入「未分类」');
+    }
+}
+
+/**
+ * 重排分类顺序
+ *
+ * @param {string[]} orderedIds
+ */
+function handleCategoryReorder(orderedIds) {
+    dispatch('reorderCategories', { orderedIds: orderedIds });
 }
 
 // ==================== 搜索事件 ====================
@@ -974,14 +1001,8 @@ function handleBatchSelectAll() {
  * 【统一清空顺序】与 handleBatchMove 保持一致：
  *   先 clearStatementSelection(false) 清空选中（不渲染），
  *   再 dispatch（触发一次渲染）。
- * 这样渲染函数看到的选中集就是"已清空"的，无需在内部
- * 隐式清理选中状态，职责更清晰。
  *
  * 【M1 修复】回收站溢出警告。
- *   当待删除数量超过 MAX_RECYCLE_BIN_SIZE 时，多余的条目会被
- *   从回收站挤出并永久删除。此约束在原实现中未在确认框中提示，
- *   用户会误以为"所有删除都能恢复"。现附加明确的警告文案，
- *   让用户在点击"确定"之前充分知情。
  */
 async function handleBatchDelete() {
     const selectedIds = getSelectedStatementIds();
@@ -1040,10 +1061,6 @@ async function handleBatchDelete() {
  *     - 实际移动的数量
  *     - 因"目标标签就是源标签"被跳过的数量
  *     - 因"目标标签中已有相同文本"被跳过的数量
- *
- *   然后根据预计算结果决定：
- *     a) 全部跳过 → 不发 dispatch，直接给出原因
- *     b) 有实际移动 → 发 dispatch，展示明细
  */
 async function handleBatchMove() {
     const selectedIds = getSelectedStatementIds();
@@ -1239,16 +1256,20 @@ function handleAddStatement(text) {
  * 【C3 修复】补全导出字段。
  *   exportData 现完整包含 tags / statementsMap / recycleBin /
  *   uiState / settings 五个字段，与 Vault 顶层结构一一对应。
+ *
+ * 【本次重构说明】
+ *   exportData 新增 categories 字段（与 Vault 顶层结构对齐）。
+ *   从 exportData 导入时，normalizeVault 会正确处理 categories。
  */
 async function handleExport() {
     const vault = getVaultSnapshot();
     const exportData = {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: vault.statementsMap,
         recycleBin: vault.recycleBin,
         uiState: vault.uiState,
         settings: vault.settings,
-        version: '7.0.0',
         exportDate: new Date().toISOString()
     };
     const jsonString = JSON.stringify(exportData, null, 2);
@@ -1396,9 +1417,11 @@ async function handleLegacyImport(parsedArray) {
  *   C4：replaceVault 的切片列表补 'recycleBin'，
  *       使更多菜单徽章计数随新数据同步刷新。
  *
- * 【第一批重构】
- *   subscribe('ui') 中已增加 syncSidebarExpandedState，
- *   无需在此处额外处理侧边栏展开状态。
+ * 【本次重构说明】
+ *   parsedData.categories 会被 normalizeVault 读取并归一化。
+ *   若导入的是旧版本数据（无 categories 字段），
+ *   normalizeVault 会自动创建"只含默认分类"的数组，
+ *   所有旧标签自动归入"未分类"。用户升级后体验连续，无数据丢失。
  *
  * @param {Object} parsedData
  */
@@ -1426,6 +1449,7 @@ async function handleFullImport(parsedData) {
     let normalizedVault;
     try {
         normalizedVault = ensureDefaultTagExists(normalizeVault({
+            categories: parsedData.categories,
             tags: parsedData.tags,
             statementsMap: parsedData.statementsMap,
             recycleBin: parsedData.recycleBin,
@@ -1466,8 +1490,9 @@ async function handleFullImport(parsedData) {
     });
 
     // ---------- 结果提示 ----------
-    let message = '导入成功：' + normalizedVault.tags.length
-        + ' 个标签，' + normalizedStatementCount + ' 条语句';
+    let message = '导入成功：' + normalizedVault.categories.length + ' 个分类，'
+        + normalizedVault.tags.length + ' 个标签，'
+        + normalizedStatementCount + ' 条语句';
 
     // 提示回收站条目数（若有）
     if (normalizedVault.recycleBin.length > 0) {
@@ -1493,10 +1518,6 @@ async function handleFullImport(parsedData) {
  *
  * 【C4 修复】replaceVault 的切片列表补 'recycleBin'，
  *   使更多菜单徽章计数与重置后的空回收站同步刷新。
- *
- * 【第一批重构】
- *   subscribe('ui') 中已增加 syncSidebarExpandedState，
- *   无需在此处额外处理侧边栏展开状态。
  */
 async function handleReset() {
     const confirmed = await showConfirmDialog(
@@ -1556,10 +1577,6 @@ async function handleOpenRecycleBin() {
 
 /**
  * 更多菜单 → 快捷键帮助
- *
- * 【设计说明】
- *   项目当前未提供独立的"快捷键帮助"模态框（避免为单一功能引入新组件）。
- *   这里使用 Toast 呈现简短提示，用户如需完整列表可查阅 README。
  */
 function handleOpenShortcutsHelp() {
     showMessage(
@@ -1569,22 +1586,10 @@ function handleOpenShortcutsHelp() {
 
 /**
  * 更多菜单 → 设置
- *
- * 【C2 修复】将设置面板接线到 UI 入口。
- *
- * 每次打开设置面板时从 getVaultSnapshot() 重新读取最新的
- * vault.settings，确保面板内显示的开关状态与数据强一致。
- *
- * 开关切换后，若 dispatch 被拒（settings.js 中的 onToggle 返回 false），
- * 由 settings.js 内部回滚视觉状态。本函数不处理回滚逻辑。
- *
- * @returns {Promise<void>} 面板关闭时 resolve
  */
 async function handleOpenSettings() {
     const vault = getVaultSnapshot();
     if (!vault || !vault.settings) {
-        // 理论上不会发生（normalizeVault 保证 settings 存在），
-        // 但作为防御性处理，给出明确反馈而非静默失败。
         showMessage('设置加载失败：数据状态异常', true);
         return;
     }
@@ -1597,9 +1602,6 @@ async function handleOpenSettings() {
 
 /**
  * 更多菜单 → 关于
- *
- * 【设计说明】
- *   同 handleOpenShortcutsHelp：使用 Toast 呈现简短的版本信息。
  */
 function handleOpenAbout() {
     showMessage(
@@ -1610,24 +1612,7 @@ function handleOpenAbout() {
 /**
  * 设置面板 → 切换某个设置项
  *
- * 【返回值语义】
- *   返回 true  = 命令实际执行（或已是目标值，视觉状态无需回滚）；
- *   返回 false = 命令被拒且真实值未变化，UI 应回滚。
- *
- * settings.js 中的开关根据此返回值决定是否回滚视觉状态。
- *
- * 【M3 修复】
- *   dispatch 返回 false 可能是"幂等"（值未变化，实际上已成功）
- *   或"命令被拒"（校验失败）。原实现直接把 false 透传给
- *   settings.js，导致在幂等情况（用户点击一个与当前值相同的开关）
- *   下错误回滚视觉状态，呈现"点击无效"的观感。
- *
- *   现通过读取最新 vault.settings 判定：若最新值已等于目标值，
- *   说明是幂等而非失败，返回 true（不回滚）。
- *
- * @param {string} key 设置项键名
- * @param {any} nextValue 目标值
- * @returns {boolean} true 表示成功（含幂等），false 表示需要回滚 UI
+ * 【M3 修复】dispatch 返回 false 时，区分"幂等"与"命令被拒"。
  */
 function handleSettingsToggle(key, nextValue) {
     if (key === 'enableInitialsSearch') {
@@ -1639,9 +1624,6 @@ function handleSettingsToggle(key, nextValue) {
             return true;
         }
 
-        // M3 修复：dispatch 返回 false 时，区分"幂等"与"命令被拒"
-        // 幂等场景：用户点击的开关值已是当前值，dispatch 返回 false
-        // 但真实值已等于目标值 → 视为成功，UI 不回滚
         const latestVault = getVaultSnapshot();
         if (latestVault && latestVault.settings
             && latestVault.settings.enableInitialsSearch === nextValue) {
@@ -1650,7 +1632,6 @@ function handleSettingsToggle(key, nextValue) {
         return false;
     }
 
-    // 未知设置项：保守返回 false，让 UI 回滚
     return false;
 }
 
@@ -1658,19 +1639,6 @@ function handleSettingsToggle(key, nextValue) {
 
 /**
  * 从回收站恢复单条
- *
- * 流程：
- *   1. 查找条目
- *   2. 若源标签仍存在 → 直接恢复到源标签
- *   3. 若源标签已删除 → 弹出选择目标标签模态框
- *   4. 执行恢复并给出提示
- *
- * 【返回值语义（对齐 recycle-bin-modal.js 问题 B 修复）】
- *   返回 false = 用户主动取消（保留选中集）
- *   返回 true  = 操作已执行
- *
- * @param {string} binId
- * @returns {Promise<boolean>}
  */
 async function handleRecycleRestoreSingle(binId) {
     const vault = getVaultSnapshot();
@@ -1751,18 +1719,6 @@ async function handleRecycleRestoreSingle(binId) {
 
 /**
  * 从回收站批量恢复
- *
- * 流程：
- *   1. 让用户选择统一的目标标签
- *   2. 预计算将恢复 / 将跳过（冲突）的条数
- *   3. 执行恢复并给出明细提示
- *
- * 【返回值语义】
- *   返回 false = 用户取消目标选择，保留选中集
- *   返回 true  = 操作已执行（含"全部冲突无需 dispatch"场景）
- *
- * @param {string[]} binIds
- * @returns {Promise<boolean>}
  */
 async function handleRecycleRestoreBatch(binIds) {
     if (!Array.isArray(binIds) || binIds.length === 0) return false;
@@ -1788,7 +1744,6 @@ async function handleRecycleRestoreBatch(binIds) {
         excludeTagId: null
     });
     if (!result) {
-        // 用户取消：返回 false 让 modal 保留选中集
         return false;
     }
 
@@ -1855,9 +1810,6 @@ async function handleRecycleRestoreBatch(binIds) {
 
 /**
  * 从回收站彻底删除单条
- *
- * @param {string} binId
- * @returns {Promise<boolean>}
  */
 async function handleRecyclePurgeSingle(binId) {
     const vault = getVaultSnapshot();
@@ -1898,9 +1850,6 @@ async function handleRecyclePurgeSingle(binId) {
 
 /**
  * 从回收站批量彻底删除
- *
- * @param {string[]} binIds
- * @returns {Promise<boolean>}
  */
 async function handleRecyclePurgeBatch(binIds) {
     if (!Array.isArray(binIds) || binIds.length === 0) return false;
@@ -1926,8 +1875,6 @@ async function handleRecyclePurgeBatch(binIds) {
 
 /**
  * 清空回收站
- *
- * @returns {Promise<boolean>}
  */
 async function handleRecycleClearAll() {
     const vault = getVaultSnapshot();
@@ -1955,8 +1902,6 @@ async function handleRecycleClearAll() {
 
 /**
  * 从 sessionStorage 恢复侧边栏滚动位置
- *
- * 与主列表滚动位置相同策略：会话级瞬态，不进入 Vault 持久化。
  */
 function restoreSidebarScrollState() {
     const sidebarTagsList = document.getElementById('sidebarTagsList');
@@ -1977,13 +1922,6 @@ function restoreSidebarScrollState() {
 
 /**
  * 绑定侧边栏滚动监听 + beforeunload 兜底保存
- *
- * 保存策略：
- *   · 滚动中：150ms 防抖后写入 sessionStorage
- *   · beforeunload：立即 flush 主列表防抖持久化 + 侧边栏滚动位置
- *
- * 【R1 修复】sessionStorage 读写全部包 try/catch，避免隐私模式
- * 或配额耗尽导致主流程异常。
  */
 function bindSidebarScrollMemory() {
     const sidebarTagsList = document.getElementById('sidebarTagsList');

@@ -12,6 +12,12 @@
 // ------------------------------------------------------------------------
 // 'tags'
 //   消费方：src/views/sidebar.js 的 renderSidebar
+//   语义扩展（本次重构）：
+//     'tags' 切片现在同时覆盖"分类体系变更"——
+//     分类是标签的组织维度，与标签同属一个数据源，
+//     侧边栏渲染一次即可完整处理。不引入 'categories' 新切片，
+//     避免"改分类是否要刷新语句列表"的困惑，
+//     也避免 facade.js 的 VALID_SLICE_NAMES 与所有订阅者同步改动。
 //
 // 'statements'
 //   消费方：
@@ -51,19 +57,28 @@
 //       'deleteStatement'          增加 'recycleBin'
 //       'batchDeleteStatements'    增加 'recycleBin'
 //
-// 【本轮深度审核（第二批）】
-//   本模块无需逻辑修改。
-//   'setInitialsSearchEnabled' 的 affects: ['statements'] 判定正确：
-//     · 该设置项只影响主列表渲染结果（首字母回退匹配是否启用）
-//     · 通过 subscribe('statements') 触发 renderStatementList
-//       与 updateHeaderStats(computeVisibleCount())，统计数字同步刷新
-//     · 搜索栏本身不展示该开关状态，无需通知 'ui'
+// 【本次重构 · 分类层级（新增 4 个命令）】
+//   1. 新增命令：
+//       'addCategory'       新建分类
+//       'editCategory'      重命名分类
+//       'deleteCategory'    删除分类（其下标签回落默认分类）
+//       'reorderCategories' 重排分类顺序
+//
+//   2. 4 个命令的 affects 均为 ['tags']：
+//       · 分类增删改 → 侧边栏需要重绘（分类分组变化）
+//       · deleteCategory 会改标签的 categoryId 字段，
+//         但标签本身、语句、回收站都不变——
+//         侧边栏重绘会自然处理标签归类，无需额外通知其他切片。
+//
+//   3. 折叠状态不进 Vault（详见 constants.js 注释），
+//      因此不需要 setCategoryCollapsed 命令。
 // ========================================================================
 
 import { registerCommands } from '../core/facade.js';
 import * as statementCrud from './statement-crud.js';
 import * as statementOrganize from './statement-organize.js';
 import * as tagCrud from './tag-crud.js';
+import * as categoryCrud from './category-crud.js';
 import * as uiState from './ui-state.js';
 import * as settingsCrud from './settings-crud.js';
 import * as recycleBin from './recycle-bin.js';
@@ -171,9 +186,12 @@ export function registerAllCommands() {
             affects: ['tags']
         },
 
-        // 编辑标签（名称 / 颜色）：
-        //   - 'tags'：侧边栏名称与色点变化
-        //   - 'statements'：全局搜索模式下，卡片上渲染 .card-tag-label
+        // 编辑标签（名称 / 颜色 / 分类归属）：
+        //   - 'tags'：侧边栏名称、色点、所属分类可能变化
+        //   - 'statements'：全局搜索模式下，卡片上渲染 .card-tag-label；
+        //                   本次重构还涉及分类归属迁移——
+        //                   但分类归属不影响卡片渲染（卡片不展示分类），
+        //                   因此无需额外通知。
         'editTag': {
             run: tagCrud.editTag,
             affects: ['tags', 'statements']
@@ -194,6 +212,41 @@ export function registerAllCommands() {
         'reorderTags': {
             run: tagCrud.reorderTags,
             affects: ['tags', 'statements']
+        },
+
+        // ================================================================
+        // 分类 CRUD（本次重构新增）
+        // ================================================================
+
+        // 新建分类：
+        //   - 'tags'：侧边栏需新增分类分组
+        //     （'tags' 切片在语义上已扩展为"标签体系变更"，
+        //      包含分类的增删改；不引入 'categories' 新切片）
+        'addCategory': {
+            run: categoryCrud.addCategory,
+            affects: ['tags']
+        },
+
+        // 重命名分类：
+        //   - 'tags'：侧边栏分类标题变化
+        'editCategory': {
+            run: categoryCrud.editCategory,
+            affects: ['tags']
+        },
+
+        // 删除分类：
+        //   - 'tags'：侧边栏移除该分类，其下标签迁移到默认分类
+        //     注意：语句、回收站均不变，无需通知其他切片
+        'deleteCategory': {
+            run: categoryCrud.deleteCategory,
+            affects: ['tags']
+        },
+
+        // 重排分类顺序：
+        //   - 'tags'：侧边栏分类顺序变化
+        'reorderCategories': {
+            run: categoryCrud.reorderCategories,
+            affects: ['tags']
         },
 
         // ================================================================

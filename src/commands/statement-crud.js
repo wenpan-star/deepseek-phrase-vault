@@ -23,7 +23,21 @@
 //     原因：vault 的顶层结构完整性必须由每个命令维护，
 //           否则 Facade 检测到 nextVault === previousVault 时会误判
 //
-// 【本轮深度审核（第二批）】
+// 【本次重构 · 分类层级】
+//   所有命令的返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+//   本模块不涉及分类逻辑本身的变更，仅做机械性补全。
+//
+//   为什么补全 categories 字段是必要的：
+//     Facade 的 dispatch 中：currentVault = nextVault;
+//     若某个命令返回的对象缺少 categories 字段，
+//     则 Facade 替换 currentVault 后，vault.categories 会变为
+//     undefined，导致：
+//       · 侧边栏 renderSidebar 读取 vault.categories 时抛 TypeError
+//       · 归一化时被 normalizeCategories 重置为"只含默认分类"
+//       · 用户分类结构全部丢失
+//     因此这是必须的完整性保障，而非可选优化。
+//
+// 【本轮深度审核（第一批 / 第二批）】
 //   本模块无需逻辑修改。
 // ========================================================================
 
@@ -57,6 +71,7 @@ export function addStatement(vault, payload) {
     };
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -116,6 +131,7 @@ export function addStatementsBatch(vault, payload) {
     if (newStatements.length === 0) return vault;
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -166,6 +182,7 @@ export function editStatement(vault, payload) {
     newList[index] = { ...list[index], text: trimmedText };
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,
@@ -241,6 +258,7 @@ export function deleteStatement(vault, payload) {
         .slice(0, MAX_RECYCLE_BIN_SIZE);
 
     return {
+        categories: vault.categories,
         tags: vault.tags,
         statementsMap: {
             ...vault.statementsMap,

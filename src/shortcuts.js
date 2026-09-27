@@ -33,6 +33,25 @@
 //       → more-menu
 //       → fulltext-popover
 //
+// 【本次重构 · 分类层级（新增）】
+//   1. 新增 import：forceCloseCategoryModal
+//      （来自 views/modals/category.js，本批次暂未输出该模块，
+//        但 import 语句已按契约引入；下一批次会输出该模块）
+//
+//   2. closeTopmostOverlay 的优先级链插入 category 模态框：
+//      位置：紧接在 tag 之后、select-tag 之前。
+//
+//      顺序说明：
+//        · category 与 tag 属于同一层级的"组织维度编辑"，
+//          逻辑上相邻最清晰
+//        · 二者不会同时打开（打开一个模态框前会先关闭另一个），
+//          因此相对位置不影响实际行为，仅影响语义可读性
+//        · 新增后的完整顺序：
+//            confirm → edit → tag → category → select-tag
+//              → settings → recycle-bin
+//              → more-menu
+//              → fulltext-popover
+//
 // 【本轮深度审核修复（第一批）】
 //   C1（模块路径不匹配 —— 阻塞级）：
 //     forceCloseRecycleBinModal 的 import 路径从
@@ -46,6 +65,7 @@ import { focusAddBarInput } from './views/add-bar.js';
 import { forceCloseConfirmDialog } from './views/modals/confirm.js';
 import { forceCloseEditModal } from './views/modals/edit.js';
 import { forceCloseTagModal } from './views/modals/tag.js';
+import { forceCloseCategoryModal } from './views/modals/category.js';
 import { forceCloseSelectTagModal } from './views/modals/select-tag.js';
 import { forceCloseSettingsModal } from './views/modals/settings.js';
 import { forceCloseRecycleBinModal } from './views/modals/recycle-bin-modal.js';
@@ -125,11 +145,12 @@ export function initializeShortcuts(options) {
      *   1. 确认对话框     （modal）
      *   2. 编辑模态框     （modal）
      *   3. 标签模态框     （modal）
-     *   4. 选择标签框     （modal）
-     *   5. 设置面板       （modal）
-     *   6. 回收站面板     （modal）
-     *   7. 更多菜单       （popover，z-index 950）
-     *   8. 全文浮层       （popover，z-index 900）
+     *   4. 分类模态框     （modal）  ← 本次重构新增
+     *   5. 选择标签框     （modal）
+     *   6. 设置面板       （modal）
+     *   7. 回收站面板     （modal）
+     *   8. 更多菜单       （popover，z-index 950）
+     *   9. 全文浮层       （popover，z-index 900）
      *
      * forceCloseXxx 均返回布尔值，用于判断是否真的关闭了。
      *
@@ -139,6 +160,7 @@ export function initializeShortcuts(options) {
         if (forceCloseConfirmDialog()) return true;
         if (forceCloseEditModal()) return true;
         if (forceCloseTagModal()) return true;
+        if (forceCloseCategoryModal()) return true;
         if (forceCloseSelectTagModal()) return true;
         if (forceCloseSettingsModal()) return true;
         if (forceCloseRecycleBinModal()) return true;
