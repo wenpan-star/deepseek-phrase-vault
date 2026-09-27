@@ -3,7 +3,7 @@
 // DeepSeek 语句工坊 · 分类增 / 改 / 删 / 排序
 // 全部为纯函数
 //
-// 【本次重构 · 分类层级（新建）】
+// 【分类层级（本模块基础）】
 //   本模块集中管理 vault.categories 的变更命令。
 //
 //   为什么独立成模块：
@@ -40,6 +40,38 @@
 //
 //   幂等语义：
 //     值未变化时返回原 vault 引用，让 Facade 识别为"无变化"。
+//
+// 【Bug 8 修复 · 默认分类强制首位】
+//   背景：
+//     reorderTags 命令（tag-crud.js）**强制默认标签位于首位**
+//     （`newTags = [defaultTag]`），保证"默认标签永远是列表第一个"的
+//     不变式。但 reorderCategories 命令原先没有这个保护——
+//     若用户在 UI 层把某分类拖拽到默认分类上方，命令层会如实反映
+//     该顺序，导致默认分类「未分类」被移动到非首位。
+//
+//   根因：
+//     reorderCategories 只是"按调用方给的顺序组织分类"，
+//     没有对"默认分类必须首位"这一业务不变式做校验。
+//
+//   修复方案（双层防护的"命令层"）：
+//     · 与 reorderTags 对齐：先从 orderedIds 中剥离默认分类，
+//       重建时将默认分类放在首位
+//     · 其余分类按 orderedIds 顺序追加
+//     · 未在 orderedIds 中出现的分类追加到末尾（保持原相对顺序）
+//
+//   配合侧：
+//     · sidebar.js 的 onMove 也会阻止"将任何分类拖到默认分类之前"
+//       （交互层的"硬阻止"，避免用户看到拖拽后又弹回）
+//     · 命令层的保护是最后的防线（防止从开发者工具等其他路径
+//       绕过 UI 直接 dispatch）
+//
+//   为什么采用"双层防护"而非"单层"：
+//     · 若只有命令层保护：用户在 UI 上拖拽后，会看到分类被拖到
+//       默认分类上方，然后又被弹回首位（视觉抖动，体验不好）
+//     · 若只有交互层保护：开发者工具或未来新增的其他命令调用方
+//       可以绕过 UI，破坏不变式
+//     · 双层防护：UI 层面看不见的拖拽被阻止（无抖动），
+//       命令层面强制保证不变式（防御未来）
 // ========================================================================
 
 import { generateUniqueId } from '../utils/id.js';
@@ -207,20 +239,26 @@ export function deleteCategory(vault, payload) {
 /**
  * 重排分类顺序
  *
- * 【语义（本次重构确认）】
+ * 【语义（与 reorderTags 对齐）】
  *   orderedIds 接收**全量顺序**（含默认分类）。
  *   侧边栏收集时遍历所有 .category-group，按 DOM 顺序收集 id。
  *
- *   命令层的处理：
- *     1. 按 orderedIds 顺序组织分类
- *     2. 跳过 orderedIds 中不存在的 id（防御非法数据）
- *     3. 追加未在 orderedIds 中出现的分类（保持原顺序）
+ *   命令层的处理（**强制默认分类首位**）：
+ *     1. 先定位默认分类（DEFAULT_CATEGORY_ID）
+ *     2. 从 orderedIds 中过滤掉默认分类 id
+ *     3. 新分类数组 = [默认分类, ...(按 orderedIds 顺序的其他分类)]
+ *     4. 追加未在 orderedIds 中出现的分类（保持原顺序）
  *        —— 避免因调用方漏传导致分类丢失
  *
- *   这种"容错优先"的设计允许调用方发送"部分顺序"，
- *   命令层保证结果始终包含全部分类。
+ *   这种"强制默认分类首位 + 容错优先"的设计：
+ *     · 保证默认分类永远是第一个（业务不变式）
+ *     · 允许调用方发送"部分顺序"，命令层保证结果始终包含全部分类
  *
  * 幂等：顺序无变化时返回原 vault 引用。
+ *
+ * 【Bug 8 修复说明】
+ *   见文件头注释。修复后的实现与 reorderTags 对齐：
+ *   默认分类固定首位，不接受 orderedIds 中它的位置。
  *
  * @param {Object} vault
  * @param {{ orderedIds: string[] }} payload
@@ -229,13 +267,30 @@ export function deleteCategory(vault, payload) {
 export function reorderCategories(vault, payload) {
     const orderedIds = Array.isArray(payload.orderedIds) ? payload.orderedIds : [];
 
+    // ---------- 定位默认分类 ----------
+    // 默认分类理论上永远存在（normalizeCategories 保证），
+    // 但作为公共 API 的防御层，仍然处理缺失场景：
+    //   若默认分类不存在（数据被外部篡改），退化为"按 orderedIds 顺序"，
+    //   不做首位强制（因为没有默认分类可强制）
+    const defaultCategory = vault.categories.find(function (category) {
+        return category.id === DEFAULT_CATEGORY_ID;
+    });
+
     const categoryMap = new Map(vault.categories.map(function (category) {
         return [category.id, category];
     }));
 
+    // ---------- 构建新分类数组 ----------
     const newCategories = [];
     const usedIds = new Set();
 
+    // 1. 默认分类固定首位
+    if (defaultCategory) {
+        newCategories.push(defaultCategory);
+        usedIds.add(DEFAULT_CATEGORY_ID);
+    }
+
+    // 2. 其余分类按 orderedIds 顺序追加（跳过默认分类 id）
     for (const id of orderedIds) {
         if (usedIds.has(id)) continue;
         const category = categoryMap.get(id);
@@ -245,14 +300,14 @@ export function reorderCategories(vault, payload) {
         }
     }
 
-    // 追加未在 orderedIds 中出现的分类（保持原顺序）
+    // 3. 追加未在 orderedIds 中出现的分类（保持原顺序）
     for (const category of vault.categories) {
         if (!usedIds.has(category.id)) {
             newCategories.push(category);
         }
     }
 
-    // 幂等检测：顺序无变化时返回原引用
+    // ---------- 幂等检测：顺序无变化时返回原引用 ----------
     let orderChanged = newCategories.length !== vault.categories.length;
     if (!orderChanged) {
         for (let index = 0; index < newCategories.length; index++) {

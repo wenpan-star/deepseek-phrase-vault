@@ -17,6 +17,7 @@ deepseek-statement-workshop/
 │   │   ├── statement-crud.js
 │   │   ├── statement-organize.js
 │   │   ├── tag-crud.js
+│   │   ├── category-crud.js                ← 分类增删改排（本版本新增）
 │   │   ├── ui-state.js
 │   │   ├── settings-crud.js
 │   │   ├── recycle-bin.js
@@ -37,6 +38,7 @@ deepseek-statement-workshop/
 │   │   │   ├── confirm.js
 │   │   │   ├── edit.js
 │   │   │   ├── tag.js
+│   │   │   ├── category.js                 ← 分类新建/编辑模态框（本版本新增）
 │   │   │   ├── select-tag.js
 │   │   │   ├── settings.js
 │   │   │   └── recycle-bin-modal.js

@@ -18,18 +18,15 @@
 //
 // 【方案 A 调整】
 //   1. 新增 vault.settings 命名空间：
-//        与 uiState 分离，用于存放用户偏好（跨会话持久，
-//        未来可参与"配置同步"，与"重置 UI 状态"解耦）
+//        与 uiState 分离，用于存放用户偏好（跨会话持久）
 //   2. 新增 vault.recycleBin 数组：
-//        存放软删除的语句。每条记录包含来源标签快照
-//        （id / name / color）与删除时间。
+//        存放软删除的语句
 //   3. 新增 normalizeSettings / normalizeRecycleBin 两个归一化函数
 //
-// 【本次重构 · 分类层级（新增）】
+// 【分类层级（本模块基础）】
 //   1. 新增 vault.categories 数组：
 //        标签的一级分组。每条记录包含 id 与 name。
-//        默认分类（DEFAULT_CATEGORY_ID = "未分类"）永远存在，
-//        作为所有未分类标签的兜底容器。
+//        默认分类（DEFAULT_CATEGORY_ID = "未分类"）永远存在。
 //
 //   2. 标签新增 categoryId 字段：
 //        指向 vault.categories 中的某个分类。
@@ -38,21 +35,52 @@
 //
 //   3. 新增 normalizeCategories 归一化函数。
 //
-//   4. 归一化策略：
-//        · 旧数据无 categories 字段 → 创建只含默认分类的数组，
-//          所有旧标签自动归入默认分类。用户升级后首次打开即看到
-//          "未分类"下包含全部旧标签，体验连续，无数据丢失。
-//        · 数据里 tags[].categoryId 指向已被删除的分类（例如
-//          用户手动编辑或数据被截断）→ 回落到默认分类。
-//        · 保证默认分类一定存在（不存在则在首位插入）。
+//   4. 新增 countTagsInCategory / getTagsInCategory 查询函数。
 //
-//   5. 折叠状态不进 Vault（详见 constants.js 注释）。
-//      uiState 结构保持与方案 A 完全一致。
+// 【本轮 Bug 10 修复 · normalizeCategories 强制默认分类首位】
+//   背景：
+//     normalizeCategories 原实现中，若 rawCategories 已包含
+//     DEFAULT_CATEGORY_ID（但不在首位），则会**保留其原位**，
+//     不强制移动到首位。这导致归一化后 vault.categories 中
+//     默认分类可能不在首位，破坏了"默认分类永远第一"的
+//     业务不变式。
 //
-// 【本轮深度审核（第一批 / 第二批 / 第三批）】
-//   本模块无需逻辑修改。
-//   ensureDefaultTagExists 在返回对象中已正确携带 categories
-//   字段，保持 Vault 顶层结构完整性。
+//   为什么这是高优先级 bug：
+//     Bug 8 修复后，reorderCategories（commands/category-crud.js）
+//     和 onMove（views/sidebar.js）都**假设**归一化层保证
+//     "默认分类首位"。若归一化层不保证，则：
+//       · 用户从外部导入的 JSON（非本应用导出）可能破坏不变式
+//       · 手工编辑 localStorage 后加载可能破坏不变式
+//       · 一旦破坏，命令层与 UI 层的假设失效，可能出现
+//         "默认分类跑偏 + 用户拖拽后又被强制拉回"的视觉抖动
+//
+//   触发场景（当前不会触发，但属于契约保证）：
+//     外部数据的 categories 数组顺序不是"默认分类首位"时
+//
+//   修复方案：
+//     重构 normalizeCategories：
+//       1. 遍历 rawCategories 时，若遇到 DEFAULT_CATEGORY_ID，
+//          不直接 push，而是暂存
+//       2. 遍历结束后，将默认分类**强制构造为规定名称**并**放到首位**
+//       3. 其他分类按原顺序追加
+//
+//     这样无论 rawCategories 中默认分类的位置如何，输出永远是
+//     "默认分类首位 + 其他分类原顺序"。
+//
+//     额外收益：默认分类的 name 也会被强制修正为 DEFAULT_CATEGORY_NAME
+//     （若外部数据中的 name 被意外修改），保证归一化的幂等性。
+//
+// 【本轮 Bug 10 配套修复 · ensureDefaultTagExists 分类保障增强】
+//   原实现中，若 categories 已包含默认分类但不在首位，会保留原位。
+//   现改为：若默认分类不在首位或名称异常，重建 categories 数组，
+//   强制默认分类位于首位。
+//
+//   这样 ensureDefaultTagExists 作为独立公共 API（可能被 main.js
+//   单独调用）也能保证"默认分类首位"的不变式。
+//
+// 【历史版本】
+//   - 第一/二/三批深度审核：本模块无需逻辑修改。
+//   - 本轮修复：Bug 10（normalizeCategories 强制默认分类首位）。
 // ========================================================================
 
 import {
@@ -76,7 +104,7 @@ import { getBuiltinPreset } from '../preset.js';
  *
  * 结构：
  *   {
- *     categories: [{ id, name }],       ← 本次重构新增
+ *     categories: [{ id, name }],
  *     tags: [],
  *     statementsMap: {},
  *     recycleBin: [],
@@ -85,7 +113,7 @@ import { getBuiltinPreset } from '../preset.js';
  *   }
  *
  * 新建时 categories 已含默认分类，保证 Vault 始终满足
- * "至少有一个分类"的不变式。
+ * "至少有一个分类且默认分类位于首位"的不变式。
  *
  * @returns {{categories: Array, tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
  */
@@ -113,7 +141,6 @@ export function createEmptyVault() {
  *
  * 说明：preset.tags 的每一项都会被赋予 DEFAULT_CATEGORY_ID，
  *       即所有内置标签默认归入"未分类"。
- *       这与"旧数据自动归入默认分类"的行为保持一致。
  *
  * @returns {{categories: Array, tags: Array, statementsMap: Object, recycleBin: Array, uiState: Object, settings: Object}}
  */
@@ -126,7 +153,7 @@ export function createVaultFromBuiltinPreset() {
             name: tag.name,
             // 预设中的颜色同样走白名单，防御 preset.js 被误编辑
             color: PRESET_COLORS.includes(tag.color) ? tag.color : null,
-            // 本次重构：所有预设标签默认归入"未分类"
+            // 所有预设标签默认归入"未分类"
             categoryId: DEFAULT_CATEGORY_ID
         };
     });
@@ -243,8 +270,6 @@ export function normalizeRecycleBin(rawRecycleBin) {
             && rawItem.deletedAt > 0) {
             deletedAt = Math.floor(rawItem.deletedAt);
         } else {
-            // 无有效时间戳的条目视为"很久以前删除"，时间戳回退到 0
-            // （会被后续排序和淘汰规则自然处理）
             deletedAt = 0;
         }
 
@@ -289,9 +314,6 @@ export function normalizeRecycleBin(rawRecycleBin) {
  *     - 原始值类型与默认值不一致 → 用默认值
  *     - 一致 → 保留原始值
  *
- * 未来若需枚举校验（如 theme: 'light' | 'dark'），
- * 增加 SETTINGS_VALIDATORS 表，在类型校验后应用自定义断言。
- *
  * @param {Object|null} rawSettings
  * @returns {Object}
  */
@@ -320,37 +342,40 @@ export function normalizeSettings(rawSettings) {
 }
 
 /**
- * 归一化分类数组（本次重构新增）。
+ * 归一化分类数组（本次重构新增；本轮 Bug 10 修复）。
  *
- * 规则：
- *   · 非数组（undefined / null / 其他类型）→ 返回只含默认分类的数组
- *   · 每项校验 id 与 name：任一为空则丢弃
- *   · 同 id 去重（保留首次出现的）
- *   · 保证默认分类一定存在：
- *       若归一化后的数组不含默认分类 → 在首位插入默认分类
- *       （unshift 而非 push：默认分类保持在最上方，用户初次打开
- *        即能看到"未分类"作为落点）
+ * 【不变式】
+ *   输出必然满足：
+ *     1. 首项是默认分类（id === DEFAULT_CATEGORY_ID）
+ *     2. 默认分类的 name 恒为 DEFAULT_CATEGORY_NAME
+ *     3. 其他分类保序、去重
  *
- * 与标签归一化的差异：
- *   · 分类没有颜色字段（分类不参与色点标识）
- *   · 分类没有其他嵌套字段（保持最简结构）
- *   · 默认分类的插入位置固定为首位（标签的默认标签固定为首位，
- *     两者设计一致）
+ * 【为什么强制默认分类首位】
+ *   见文件头【本轮 Bug 10 修复】说明。
  *
- * 防御要点：
- *   · 非对象项静默丢弃
- *   · name 去空白后为空则丢弃（避免幽灵"空名分类"）
- *   · 严格去重，避免同 id 多份副本造成的引用混乱
+ * 【为什么强制默认分类名】
+ *   归一化层应保证幂等性：normalize(normalize(x)) === normalize(x)。
+ *   若外部数据把默认分类的 name 改成了别的，直接保留会导致：
+ *     · 归一化结果与"规定名称"不一致（破坏不变式）
+ *     · 二次归一化可能因 name 变化产生不同结果
+ *   强制修正为 DEFAULT_CATEGORY_NAME 是幂等性的前提。
+ *
+ * 【实现说明】
+ *   原实现是"遍历时 push，最后若默认分类缺失则 unshift"，
+ *   这无法处理"默认分类存在但不在首位"的场景。
+ *
+ *   现实现改为"遍历时暂存默认分类，最后统一放到首位"。
  *
  * @param {Array|null|undefined} rawCategories
  * @returns {Array<{id: string, name: string}>}
  */
 export function normalizeCategories(rawCategories) {
+    // ---------- 非数组：返回只含默认分类的数组 ----------
     if (!Array.isArray(rawCategories)) {
         return [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }];
     }
 
-    const result = [];
+    const otherCategories = [];
     const seenIds = new Set();
 
     for (const rawCategory of rawCategories) {
@@ -367,18 +392,21 @@ export function normalizeCategories(rawCategories) {
         if (seenIds.has(categoryId)) continue;
 
         seenIds.add(categoryId);
-        result.push({ id: categoryId, name: categoryName });
+
+        // 默认分类不直接加入 otherCategories，最后统一放到首位
+        // （无论原始 name 是什么，都会使用 DEFAULT_CATEGORY_NAME）
+        if (categoryId === DEFAULT_CATEGORY_ID) {
+            continue;
+        }
+
+        otherCategories.push({ id: categoryId, name: categoryName });
     }
 
-    // 保证默认分类存在
-    if (!seenIds.has(DEFAULT_CATEGORY_ID)) {
-        result.unshift({
-            id: DEFAULT_CATEGORY_ID,
-            name: DEFAULT_CATEGORY_NAME
-        });
-    }
-
-    return result;
+    // ---------- 默认分类强制首位 ----------
+    return [
+        { id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME },
+        ...otherCategories
+    ];
 }
 
 /**
@@ -386,17 +414,18 @@ export function normalizeCategories(rawCategories) {
  *
  * 向后兼容说明：
  *   旧版本数据可能在 uiState 中包含 mainListScrollTop / sidebarScrollTop，
- *   也可能完全缺少 recycleBin / settings 字段。
- *   本次重构又新增了 categories 字段。
+ *   也可能完全缺少 recycleBin / settings / categories 字段。
  *   本函数静默处理所有这些差异，保证从任意历史版本升级都不会失败。
  *
  * @param {Object} rawVault
  * @returns {Object}
  */
 export function normalizeVault(rawVault) {
-    // ---------- 分类归一化（本次重构新增）----------
+    // ---------- 分类归一化 ----------
     // 顺序很重要：先归一化分类，再归一化标签，
     // 因为标签的 categoryId 需要参照分类名单校验。
+    //
+    // Bug 10 修复后，normalizedCategories 的首项必然是默认分类。
     const normalizedCategories = normalizeCategories(
         rawVault && rawVault.categories
     );
@@ -423,7 +452,6 @@ export function normalizeVault(rawVault) {
         const tagColor = PRESET_COLORS.includes(rawTag.color) ? rawTag.color : null;
 
         // 分类归属校验：非法或缺失时回落到默认分类
-        // （旧数据无 categoryId 字段 → 自动归入"未分类"）
         const rawCategoryId = rawTag.categoryId == null
             ? ''
             : String(rawTag.categoryId).trim();
@@ -458,7 +486,7 @@ export function normalizeVault(rawVault) {
         }
     }
 
-    // ---------- recycleBin 归一化（方案 A）----------
+    // ---------- recycleBin 归一化 ----------
     const normalizedRecycleBin = normalizeRecycleBin(
         rawVault && rawVault.recycleBin
     );
@@ -481,10 +509,6 @@ export function normalizeVault(rawVault) {
         ? SEARCH_SCOPE_GLOBAL
         : SEARCH_SCOPE_LOCAL;
 
-    // 注意：这里不再读取 rawUiState.mainListScrollTop / sidebarScrollTop。
-    //       即使旧数据包含它们，也会被静默忽略（不报错、不迁移）。
-    //       本次重构同样不读取任何"折叠状态"字段——
-    //       折叠状态由 localStorage 独立键管理，与 Vault 完全解耦。
     const normalizedUiState = {
         currentTagId: normalizedCurrentTagId,
         sidebarExpanded: Boolean(rawUiState.sidebarExpanded),
@@ -495,7 +519,7 @@ export function normalizeVault(rawVault) {
         searchScope: normalizedSearchScope
     };
 
-    // ---------- settings 归一化（方案 A）----------
+    // ---------- settings 归一化 ----------
     const normalizedSettings = normalizeSettings(
         rawVault && rawVault.settings
     );
@@ -514,13 +538,18 @@ export function normalizeVault(rawVault) {
  * 确保默认分类与默认标签存在；确保 currentTagId 合法；
  * 确保每个标签的 categoryId 合法。
  *
- * 【本次重构】
- *   1. 函数名保持（不破坏现有调用方），但职责扩展为同时保证
- *      默认分类和默认标签。
- *   2. 返回对象补齐 categories 字段，保持 Vault 顶层结构完整。
+ * 【本轮 Bug 10 配套修复】
+ *   原实现对"默认分类存在但不在首位"的场景不做处理（保留原位）。
+ *   现改为：若默认分类不在首位或名称异常，重建 categories 数组，
+ *   强制默认分类位于首位。
+ *
+ *   理由：
+ *     ensureDefaultTagExists 是公共 API，可能被 main.js 单独调用
+ *     （例如 handleReset 中直接调用 ensureDefaultTagExists(normalizeVault(...))）。
+ *     作为独立入口，它也必须保证"默认分类首位"的不变式。
  *
  * 【幂等性】
- *   若一切正常（默认分类存在、默认标签存在、categoryId 都合法、
+ *   若一切正常（默认分类存在且首位、默认标签存在、categoryId 都合法、
  *   currentTagId 合法），返回原 vault 引用。
  *   否则返回新对象。
  *
@@ -534,29 +563,40 @@ export function ensureDefaultTagExists(vault) {
         : [];
     let modified = false;
 
-    // 保证默认分类存在（首位）
     if (categories.length === 0) {
+        // 场景 1：完全无分类 → 只含默认分类
         categories = [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }];
         modified = true;
     } else {
         const defaultCategoryIndex = categories.findIndex(function (category) {
             return category.id === DEFAULT_CATEGORY_ID;
         });
+
         if (defaultCategoryIndex === -1) {
+            // 场景 2：默认分类不存在 → 首位插入
             categories.unshift({
                 id: DEFAULT_CATEGORY_ID,
                 name: DEFAULT_CATEGORY_NAME
             });
             modified = true;
-        } else if (categories[defaultCategoryIndex].name !== DEFAULT_CATEGORY_NAME) {
-            // 默认分类名被意外修改 → 恢复为规定名称
-            const updatedCategories = categories.slice();
-            updatedCategories[defaultCategoryIndex] = {
-                ...updatedCategories[defaultCategoryIndex],
-                name: DEFAULT_CATEGORY_NAME
-            };
-            categories = updatedCategories;
-            modified = true;
+        } else {
+            // 场景 3：默认分类存在 → 检查名称与位置
+            const existingDefault = categories[defaultCategoryIndex];
+            const needsNameFix = existingDefault.name !== DEFAULT_CATEGORY_NAME;
+            const needsPositionFix = defaultCategoryIndex !== 0;
+
+            if (needsNameFix || needsPositionFix) {
+                // 重建：默认分类放首位（名称修正）+ 其他分类保序
+                const defaultCategory = {
+                    id: DEFAULT_CATEGORY_ID,
+                    name: DEFAULT_CATEGORY_NAME
+                };
+                const otherCategories = categories.filter(function (category) {
+                    return category.id !== DEFAULT_CATEGORY_ID;
+                });
+                categories = [defaultCategory, ...otherCategories];
+                modified = true;
+            }
         }
     }
 
@@ -740,7 +780,7 @@ export function countStatementsInTag(vault, tagId) {
 }
 
 /**
- * 统计某分类下的标签数（本次重构新增）
+ * 统计某分类下的标签数
  *
  * 供侧边栏渲染分类徽章使用：
  *   · 分类徽章显示"该分类下的标签数量"，而非"语句总数"
@@ -759,7 +799,7 @@ export function countTagsInCategory(vault, categoryId) {
 }
 
 /**
- * 获取指定分类下的标签列表（本次重构新增）
+ * 获取指定分类下的标签列表
  *
  * 保持 vault.tags 数组的原有顺序，不重新排序。
  * 侧边栏渲染时直接使用，保证"标签在分类内的相对顺序"

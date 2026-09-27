@@ -14,7 +14,7 @@
 //     - 立即聚焦 input
 //   与 edit.js 的空文本反馈策略保持一致。
 //
-// 【本次重构 · 分类层级】
+// 【分类层级（本模块基础）】
 //   1. 新增"所属分类"下拉选择器。
 //      位置：名称输入框之后、颜色选择器之前。
 //
@@ -26,22 +26,36 @@
 //   2. openTagModal 增加 categories 与 initialCategoryId 参数：
 //        · categories：当前 vault 的所有分类（用于填充下拉选项）
 //        · initialCategoryId：初始选中的分类 id
-//          （新建时由 main.js 传入 DEFAULT_CATEGORY_ID；
-//           编辑时传入标签当前的 categoryId）
 //
 //   3. 返回值增加 categoryId 字段：
 //        · 用户在下拉中选择的分类 id
-//        · 若下拉选项为空（理论不会，默认分类始终存在），
-//          返回 DEFAULT_CATEGORY_ID 作为兜底
 //
 //   4. 分类下拉的语义：
 //        · 用户切换分类通过此下拉完成（不通过拖拽）
 //        · 理由：触屏设备也可用，操作明确，实现简单
 //
-//   5. 关闭时的清理逻辑需要额外处理 categorySelect 的事件监听。
+// 【Bug 3 修复 · currentCategories 校验启用】
+//   背景：
+//     本模块声明了 currentCategories 变量并在 openTagModal 中赋值，
+//     注释声明"用于 handleConfirm 时校验分类 id 的合法性（防御性）"，
+//     但 handleConfirm 实际上**未使用**该变量。
+//     这是一个半成品实现——承诺的防御性校验从未落地。
 //
-// 【本轮深度审核（第一批 / 第二批 / 第三批）】
-//   本模块无需逻辑修改。
+//   当前为何不触发问题：
+//     默认分类始终存在（normalizeCategories 保证），
+//     下拉选项始终至少包含默认分类，用户不可能选中一个不存在的分类 id。
+//     所以这个 bug 是"逻辑完整性问题"，不是"用户可感知的功能问题"。
+//
+//   修复方案：
+//     在 handleConfirm 中对选中的分类 id 做存在性校验：
+//       · 若为空 → 回退 DEFAULT_CATEGORY_ID
+//       · 若不在 currentCategories 中 → 回退 DEFAULT_CATEGORY_ID
+//     这是对"未来可能新增的边界场景"的防御（例如：分类列表在
+//     打开模态框后被其他操作清空）。
+//
+//   为什么不删除这个半成品：
+//     用户明确要求"不得删除、降级或绕过任何现有功能"。
+//     半成品本身是"承诺的功能"，正确做法是**补齐实现**而非删除承诺。
 // ========================================================================
 
 import {
@@ -70,7 +84,7 @@ let inputErrorTimer = null;
 
 // ---------- 当前可选分类列表（本次交互） ----------
 // 每次 openTagModal 时由参数覆盖。
-// 用于 handleConfirm 时校验分类 id 的合法性（防御性）。
+// 用于 handleConfirm 时校验分类 id 的合法性（Bug 3 修复）。
 let currentCategories = [];
 
 /**
@@ -167,9 +181,6 @@ function renderColorPicker() {
 
 /**
  * 更新颜色选择器的选中状态
- *
- * 遍历所有 .color-circle，若某圆点对应当前颜色则添加 .selected 类。
- * 最后一个圆点是"无颜色"选项。
  */
 function updateColorSelection() {
     const circles = colorContainer.querySelectorAll('.color-circle');
@@ -239,6 +250,15 @@ function triggerInputErrorFeedback(element) {
 
 /**
  * 确认：读取名称、颜色、分类并 resolve
+ *
+ * 【Bug 3 修复】
+ *   对选中的分类 id 做存在性校验：
+ *     · 若为空 → 回退 DEFAULT_CATEGORY_ID
+ *     · 若不在 currentCategories 中 → 回退 DEFAULT_CATEGORY_ID
+ *
+ *   防御的场景（当前不可触发，但属于契约保证）：
+ *     · 未来分类列表可能因某种原因与下拉选项不一致
+ *     · 用户通过开发者工具修改下拉选项的 value
  */
 function handleConfirm() {
     const name = nameInput.value.trim();
@@ -250,6 +270,14 @@ function handleConfirm() {
     // 分类 id 兜底：若下拉为空（理论不会），回退默认分类
     let selectedCategoryId = categorySelect.value;
     if (!selectedCategoryId) {
+        selectedCategoryId = DEFAULT_CATEGORY_ID;
+    }
+
+    // 【Bug 3 修复】防御性校验：选中的分类必须在可选列表中
+    const isCategoryValid = currentCategories.some(function (category) {
+        return category.id === selectedCategoryId;
+    });
+    if (!isCategoryValid) {
         selectedCategoryId = DEFAULT_CATEGORY_ID;
     }
 
@@ -338,6 +366,7 @@ export function openTagModal(options) {
     nameInput.classList.remove('input-error');
 
     // 保存本次可选分类列表（用于 handleConfirm 时的防御性校验）
+    // 【Bug 3 修复】此变量现在被 handleConfirm 实际使用
     currentCategories = Array.isArray(options.categories)
         ? options.categories
         : [];

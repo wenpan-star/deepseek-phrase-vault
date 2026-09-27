@@ -45,16 +45,9 @@
 //   M3（设置开关回滚依赖 dispatch 布尔返回值语义）
 //
 // 【第一批重构（历史）】
-//   问题 A（快速切标签时滚动位置丢失）：
-//     handleTagClick 在 dispatch('switchTag') 之前调用
-//     flushScrollPosition()，把防抖窗口内待保存的滚动位置立即落盘。
-//
-//   问题 B（批量恢复被取消时选中集被清空）：
-//     handleRecycleRestoreBatch / handleRecyclePurgeBatch /
-//     handleRecycleClearAll 显式返回 boolean。
-//
-//   问题 C（导入后侧边栏展开状态失同步）：
-//     subscribe('ui') 中调用 syncSidebarExpandedState。
+//   问题 A（快速切标签时滚动位置丢失）
+//   问题 B（批量恢复被取消时选中集被清空）
+//   问题 C（导入后侧边栏展开状态失同步）
 //
 // 【第二批重构（历史）】
 //   问题 I（bootstrap 未处理 initializeFacade 返回 null）
@@ -66,38 +59,71 @@
 // 【第四批重构（历史）】
 //   问题 · 编辑事故遗留的两个死引用（源码卫生）
 //
-// 【本次重构 · 分类层级】
-//   1. 新增 import：openCategoryModal
-//      （来自 views/modals/category.js）
-//
-//   2. initializeSidebar 增加 4 个分类相关的回调：
+// 【分类层级（本模块基础）】
+//   1. initializeSidebar 增加 4 个分类相关的回调：
 //        · onCategoryAdd      → handleCategoryAdd
 //        · onCategoryEdit     → handleCategoryEdit
 //        · onCategoryDelete   → handleCategoryDelete
 //        · onCategoryReorder  → handleCategoryReorder
 //
-//   3. 新增 4 个 handlers：
-//        · handleCategoryAdd      新建分类
-//        · handleCategoryEdit     重命名分类
-//        · handleCategoryDelete   删除分类（含非空确认框）
-//        · handleCategoryReorder  重排分类顺序
+//   2. handleAddTag / handleTagEdit 传递分类列表给模态框
 //
-//   4. handleAddTag / handleTagEdit 传递分类列表给模态框：
-//        · handleAddTag：categories = vault.categories，
-//          initialCategoryId = DEFAULT_CATEGORY_ID
-//        · handleTagEdit：categories = vault.categories，
-//          initialCategoryId = tag.categoryId
-//        返回值新增 categoryId 字段，dispatch('addTag'/'editTag') 时传递
-//
-//   5. handleReset / handleFullImport 的 replaceVault 调用
+//   3. handleReset / handleFullImport 的 replaceVault 调用
 //      不需要修改——normalizedVault 已包含 categories 字段
-//      （由 normalizeVault 保证），切片列表 ['tags', 'statements',
-//      'ui', 'recycleBin'] 已完整覆盖分类变更的影响面。
 //
-//   6. beforeunload 不额外 flush 折叠状态：
-//      侧边栏折叠的防抖窗口只有 200ms，用户在窗口内刷新的概率极低，
-//      且折叠状态丢失的影响极小（下次打开分类全部展开）。
-//      为保持主流程简洁，不引入额外的 flush 调用。
+// 【上一轮 Bug 修复】
+//   Bug 2（handleCategoryEdit 缺少"未做修改"检测）：
+//     · 增加检测：若用户提交的名称与现有名称相同 → 提示"未做修改"并返回
+//
+//   Bug 1 配套（onCategoryCollapseBlocked 接线）：
+//     · initializeSidebar 新增回调 onCategoryCollapseBlocked
+//     · 新增 handleCategoryCollapseBlocked 函数：显示 Toast 提示
+//
+// 【本轮 Bug 12 修复 · handleTagEdit 缺少"未做修改"检测】
+//   背景：
+//     handleCardEdit 与 handleCategoryEdit 都有"文本/名称未变时提示
+//     '未做修改'"的短路逻辑，但 handleTagEdit 缺失。若不修复：
+//       用户双击标签、不修改任何字段直接确定
+//       → dispatch('editTag') 被调用
+//       → 命令层幂等（三字段均无变化）返回原 vault 引用
+//       → Facade 检测到 nextVault === previousVault，返回 false
+//       → 由于 didEdit === false，弹出"标签更新失败：名称无效或已被占用"
+//       → 用户困惑："我什么都没改，为什么失败？"
+//
+//   为什么与 handleCategoryEdit 的检测略有不同：
+//     · handleCategoryEdit 只需检查 name（分类模态框只有 name 一个字段）
+//     · handleTagEdit 需检查**三个字段**（name / color / categoryId）：
+//         - 若仅检查 name，则"用户保持名称不变、仅修改颜色或分类归属"
+//           会被误判为"未做修改"，导致真实修改被拦截（严重 bug）
+//         - 三字段全部未变化才是真正的"未做修改"
+//
+//   修复方案：
+//     在 dispatch 之前增加短路检测：
+//       若 result.name === tag.name
+//          && result.color === tag.color
+//          && result.categoryId === tag.categoryId
+//       → 提示"未做修改"并返回
+//
+//   与 handleCategoryEdit / handleCardEdit 的判定行为保持一致：
+//     · handleCardEdit：`if (result.text === found.statement.text.trim())`
+//     · handleCategoryEdit：`if (result.name === category.name)`
+//     · handleTagEdit（本次）：三字段联合比较
+//
+// 【本轮重构 · select-tag 模态框分类分组接线】
+//   在 4 处 openSelectTagModal 调用点新增 categories 参数：
+//     1. handleCardCopyToTag（复制语句到标签）
+//     2. handleBatchMove（批量移动到标签）
+//     3. handleRecycleRestoreSingle（源标签已删除时选择恢复目标）
+//     4. handleRecycleRestoreBatch（批量恢复时选择目标标签）
+//
+//   为什么要传 categories：
+//     select-tag.js 的分组渲染需要按 vault.categories 顺序遍历，
+//     以保证与 sidebar 的分类顺序严格一致。
+//     详见 select-tag.js 文件头注释。
+//
+//   为什么不预先在 main.js 分组：
+//     "把 tags 按 categoryId 分桶"是呈现组织逻辑，属于视图层职责。
+//     放在 main.js 会导致 4 处重复实现，且未来加新规则需改多处。
 // ========================================================================
 
 import {
@@ -129,7 +155,6 @@ import {
 } from './core/vault.js';
 // 可见集单一真相源：
 //   · computeVisibleStatements —— 与 statement-list.js 共享同一实现
-//   （matchSearch 已在本模块的可见集重构中移除——本文件不再直接做匹配）
 import { computeVisibleStatements } from './commands/search.js';
 
 import { initializeToast, showMessage } from './views/toast.js';
@@ -201,9 +226,6 @@ let hasLoggedModernClipboardFailure = false;
  *   已警告过"。首次失败时记录完整 warn（含错误对象），后续失败
  *   静默降级。这保留了首次诊断信息，同时避免日志刷屏。
  *
- *   该标志不重置（除非页面刷新），因为失败是环境级属性，
- *   同一会话内不会自愈。
- *
  * @param {string} text
  * @returns {Promise<void>} 两条路径均失败时抛出异常
  */
@@ -229,7 +251,6 @@ async function copyTextToClipboard(text) {
     // ---------- 路径 2：execCommand('copy') 降级 ----------
     const textareaElement = document.createElement('textarea');
     textareaElement.value = text;
-    // 使用 fixed 定位 + 透明，避免触发页面滚动或视觉闪烁
     textareaElement.style.position = 'fixed';
     textareaElement.style.top = '0';
     textareaElement.style.left = '0';
@@ -246,21 +267,12 @@ async function copyTextToClipboard(text) {
 
     try {
         textareaElement.select();
-        // 不再调用 setSelectionRange：
-        //   · select() 已经完整选中 textarea 内容，等价于
-        //     setSelectionRange(0, textareaElement.value.length)
-        //   · iOS Safari 对 readonly textarea 调用 setSelectionRange
-        //     可能抛 InvalidStateError
-        //   · 一旦抛异常，execCommand('copy') 不会执行，
-        //     用户看到"复制失败"——而实际上 execCommand 本可成功
-        //   · 移除冗余调用可最大化跨浏览器成功率
 
         const succeeded = document.execCommand('copy');
         if (!succeeded) {
             throw new Error('execCommand 返回 false');
         }
     } finally {
-        // 无论成功或失败，都要清理临时元素
         document.body.removeChild(textareaElement);
     }
 }
@@ -275,11 +287,6 @@ async function copyTextToClipboard(text) {
  *   （见 facade.js 的 FA-4 保护）。此时不能继续初始化视图层——
  *   否则 initializeAllViews 内部的第一行 getVaultSnapshot().uiState
  *   会在 null 上抛 TypeError，掩盖真实根因。
- *
- *   修复策略：
- *     1. 检查 initializeFacade 返回值
- *     2. 为 null 时：记录明确的错误日志 + 用户提示 + 提前返回
- *     3. 不执行后续初始化（不注册命令、不初始化视图、不渲染）
  */
 async function bootstrap() {
     // 1. Font Awesome 异步加载，不阻塞初始化
@@ -309,7 +316,7 @@ async function bootstrap() {
         return;
     }
 
-    // 3.1 明文降级提示（Web Crypto 不可用时，数据实际以明文保存）
+    // 3.1 明文降级提示
     if (!isCryptoAvailable()) {
         showMessage('⚠️ 当前环境不支持加密，数据将以明文保存', true);
     }
@@ -317,7 +324,7 @@ async function bootstrap() {
     // 4. 注册所有命令
     registerAllCommands();
 
-    // 5. 初始化各视图（含主列表滚动监听）
+    // 5. 初始化各视图
     initializeAllViews();
 
     // 6. 首次渲染
@@ -355,7 +362,9 @@ function initializeAllViews() {
         onCategoryAdd: handleCategoryAdd,
         onCategoryEdit: handleCategoryEdit,
         onCategoryDelete: handleCategoryDelete,
-        onCategoryReorder: handleCategoryReorder
+        onCategoryReorder: handleCategoryReorder,
+        // 【Bug 1 配套】折叠被拒绝时的提示回调
+        onCategoryCollapseBlocked: handleCategoryCollapseBlocked
     });
 
     initializeHeader({
@@ -415,10 +424,6 @@ function initializeAllViews() {
         });
         updateHeaderStats(computeVisibleCount());
         // 【第一批重构 · 问题 C】同步侧边栏展开状态
-        // 场景：导入完整备份 / 重置全局时 replaceVault 替换整个 Vault，
-        //       uiState.sidebarExpanded 可能与 sidebar.js 内部的 pinnedState
-        //       不同步。此调用保证两者始终一致。
-        // 该函数幂等：值相同时立即返回，无副作用、不触发 dispatch。
         syncSidebarExpandedState(vault.uiState.sidebarExpanded);
     });
     // 订阅回收站切片 → 更新徽章
@@ -437,15 +442,6 @@ function initializeAllViews() {
  * 【第三批重构 · 可见集单一真相源】
  *   本函数不再独立实现可见集算法，而是委托给
  *   commands/search.js 的 computeVisibleStatements(vault)。
- *
- *   历史背景：
- *     此前本函数与 views/statement-list.js 的 renderStatementList
- *     各自实现了一遍可见集计算逻辑。这种双实现结构天然脆弱：
- *     任一处逻辑变更未同步，就会出现"列表显示 10 条、徽章写着 15 条"
- *     的用户可见 bug。
- *
- *     本次重构把可见集计算收敛为单一真相源，本函数只做一层
- *   "取 .statements.length" 的适配，从结构上消除漂移可能。
  *
  * @returns {number}
  */
@@ -497,9 +493,6 @@ function handleTagClick(tagId) {
 
 /**
  * 删除标签
- *
- * 确认框显示该标签下的语句数，
- * 让用户能准确评估操作损失。
  */
 async function handleTagDelete(tagId) {
     const vault = getVaultSnapshot();
@@ -527,6 +520,27 @@ async function handleTagDelete(tagId) {
     }
 }
 
+/**
+ * 编辑标签
+ *
+ * 【本轮 Bug 12 修复 · 未修改检测】
+ *   背景与根因见文件头注释。
+ *
+ *   检测三字段联动：
+ *     · name       —— 名称未变
+ *     · color      —— 颜色未变
+ *     · categoryId —— 分类归属未变
+ *
+ *   三者全部相同才算"未做修改"；任何一项变化都是真实的编辑操作，
+ *   应放行到 dispatch 流程。
+ *
+ *   为什么不能只比较 name：
+ *     用户可能"名称不变，但迁移到其他分类"或"名称不变，但改了颜色"。
+ *     若只比较 name，这些真实修改会被误判为"未做修改"而被拦截，
+ *     导致用户修改无效（严重 bug）。
+ *
+ * @param {string} tagId
+ */
 async function handleTagEdit(tagId) {
     if (tagId === DEFAULT_TAG_ID) {
         showMessage('默认语库名称不可修改', true);
@@ -546,6 +560,14 @@ async function handleTagEdit(tagId) {
         initialCategoryId: tag.categoryId
     });
     if (!result) return;
+
+    // 【Bug 12 修复】未修改检测：三字段全部未变化才视为"未做修改"
+    if (result.name === tag.name
+        && result.color === tag.color
+        && result.categoryId === tag.categoryId) {
+        showMessage('未做修改');
+        return;
+    }
 
     const isDuplicate = vault.tags.some(function (item) {
         return item.id !== tagId && item.name.trim() === result.name.trim();
@@ -611,16 +633,10 @@ function handleToggleExpand(expanded) {
     dispatch('setSidebarExpanded', { expanded: expanded });
 }
 
-// ==================== 分类事件（本次重构新增） ====================
+// ==================== 分类事件 ====================
 
 /**
  * 新建分类
- *
- * 流程：
- *   1. 打开分类模态框（mode: 'create'）
- *   2. 校验名称重复（模态框关闭后由命令层再次校验，UI 层先给友好提示）
- *   3. dispatch('addCategory')
- *   4. Toast 反馈
  */
 async function handleCategoryAdd() {
     const result = await openCategoryModal({
@@ -650,7 +666,8 @@ async function handleCategoryAdd() {
 /**
  * 重命名分类
  *
- * @param {string} categoryId
+ * 【上一轮 Bug 2 修复 · 未修改检测】
+ *   分类模态框只有 name 一个字段，因此只比较 name。
  */
 async function handleCategoryEdit(categoryId) {
     if (categoryId === DEFAULT_CATEGORY_ID) {
@@ -669,6 +686,12 @@ async function handleCategoryEdit(categoryId) {
         initialName: category.name
     });
     if (!result) return;
+
+    // 【Bug 2 修复】未修改检测
+    if (result.name === category.name) {
+        showMessage('未做修改');
+        return;
+    }
 
     const isDuplicate = vault.categories.some(function (item) {
         return item.id !== categoryId && item.name.trim() === result.name.trim();
@@ -697,10 +720,6 @@ async function handleCategoryEdit(categoryId) {
  * 【确认策略】
  *   非空分类 → 信息性确认框（提示"其下 N 个标签将移入未分类"）
  *   空分类   → 直接删除（无确认，流畅）
- *
- * 【为什么"信息性确认"而非"红色警告"】
- *   删除分类不丢数据（标签仍在，只是归属改变），
- *   因此用中性提示而非危险警告，语义更准确。
  */
 async function handleCategoryDelete(categoryId) {
     if (categoryId === DEFAULT_CATEGORY_ID) {
@@ -745,10 +764,28 @@ async function handleCategoryDelete(categoryId) {
 /**
  * 重排分类顺序
  *
+ * 【Bug 8 说明】
+ *   命令层（category-crud.js 的 reorderCategories）会强制默认分类首位，
+ *   交互层（sidebar.js 的 onMove）也会阻止将任何分类拖到默认分类之前。
+ *   本函数无需额外处理。
+ *
  * @param {string[]} orderedIds
  */
 function handleCategoryReorder(orderedIds) {
     dispatch('reorderCategories', { orderedIds: orderedIds });
+}
+
+/**
+ * 【Bug 1 配套】当用户尝试折叠当前标签所在的分类时，显示提示。
+ *
+ * @param {string} categoryName 分类名称（用于提示信息）
+ */
+function handleCategoryCollapseBlocked(categoryName) {
+    showMessage(
+        '「' + categoryName + '」包含当前正在查看的标签，无法折叠。'
+        + '请先切换到其他标签。',
+        true
+    );
 }
 
 // ==================== 搜索事件 ====================
@@ -761,11 +798,6 @@ function handleRegexToggle(useRegex) {
     dispatch('setUseRegex', { useRegex: useRegex });
 }
 
-/**
- * 切换搜索作用域
- * 保留关键词，仅切换范围
- * @param {string} scope
- */
 function handleScopeToggle(scope) {
     dispatch('setSearchScope', { scope: scope });
 }
@@ -834,14 +866,6 @@ async function handleCardDelete(statementId) {
  * 复制语句到剪贴板，并累加复制计数。
  *
  * 【M2 修复】增加"卡片是否原本在视口内"的判断。
- *
- * 默认标签下无搜索时，列表按 copyCount 降序排列。
- * 复制操作会使该语句的 copyCount +1，可能导致卡片在列表中重排。
- *
- * 若卡片原本就在视口内：记录前后 top 坐标，位置变化时补偿
- *   scrollTop，使卡片视觉位置保持不变。
- * 若卡片原本就在视口外：位置变化不影响用户视觉焦点，
- *   强行补偿反而会导致"列表莫名跳动"，因此跳过。
  */
 async function handleCardCopy(statementId) {
     const vault = getVaultSnapshot();
@@ -851,18 +875,14 @@ async function handleCardCopy(statementId) {
     try {
         await copyTextToClipboard(found.statement.text);
 
-        // 记录复制前卡片在视口中的 top 坐标
         const previousViewportTop = getStatementCardViewportTopById(statementId);
 
-        // 判断卡片原本是否在视口内
         const wasCardInViewport = previousViewportTop !== null
             && previousViewportTop >= 0
             && previousViewportTop <= window.innerHeight;
 
-        // 执行复制计数递增：可能触发重排
         dispatch('incrementCopyCount', { statementId: statementId });
 
-        // 仅当卡片原本在视口内时才补偿
         if (wasCardInViewport) {
             const nextViewportTop = getStatementCardViewportTopById(statementId);
             if (nextViewportTop !== null) {
@@ -880,6 +900,14 @@ async function handleCardCopy(statementId) {
     }
 }
 
+/**
+ * 复制语句到其他标签（通过 select-tag 模态框选择目标）
+ *
+ * 【本轮重构 · 分类分组接线】
+ *   openSelectTagModal 新增 categories 参数，使候选标签按分类分组显示。
+ *   categories 直接取 vault.categories（已由 normalizeCategories 保证
+ *   默认分类在首位，顺序与 sidebar 严格一致）。
+ */
 async function handleCardCopyToTag(statementId) {
     const vault = getVaultSnapshot();
     const found = findStatementById(vault, statementId);
@@ -902,13 +930,14 @@ async function handleCardCopyToTag(statementId) {
         title: '复制语句到标签',
         tags: candidateTags,
         counts: counts,
+        // 【本轮新增】传递分类列表，触发分组渲染
+        categories: vault.categories,
         excludeTagId: null
     });
     if (!result) return;
 
     const targetTagId = result.tagId;
 
-    // 【R4 防御】检查目标标签是否存在
     const targetTag = vault.tags.find(function (tag) {
         return tag.id === targetTagId;
     });
@@ -997,12 +1026,6 @@ function handleBatchSelectAll() {
 
 /**
  * 批量删除
- *
- * 【统一清空顺序】与 handleBatchMove 保持一致：
- *   先 clearStatementSelection(false) 清空选中（不渲染），
- *   再 dispatch（触发一次渲染）。
- *
- * 【M1 修复】回收站溢出警告。
  */
 async function handleBatchDelete() {
     const selectedIds = getSelectedStatementIds();
@@ -1013,7 +1036,6 @@ async function handleBatchDelete() {
         return selectedIds.has(statement.id);
     });
 
-    // 按 codePoint 截断预览，避免断开 surrogate pair。
     const previewLines = allSelected.slice(0, 3).map(function (statement) {
         const allCharacters = Array.from(statement.text);
         if (allCharacters.length > 30) {
@@ -1037,14 +1059,12 @@ async function handleBatchDelete() {
     const confirmed = await showConfirmDialog(confirmMessage);
     if (!confirmed) return;
 
-    // 先清空选中（不渲染），再 dispatch（触发一次渲染）
     clearStatementSelection(false);
 
     dispatch('batchDeleteStatements', {
         statementIds: Array.from(selectedIds)
     });
 
-    // 显式更新批量栏，确保 UI 状态与数据强一致
     updateBatchBar({
         selectedCount: 0,
         allSelected: false
@@ -1056,11 +1076,8 @@ async function handleBatchDelete() {
 /**
  * 批量移动到标签
  *
- * 【预计算】
- *   在 dispatch 之前做一次完整的预计算，明确区分三类结果：
- *     - 实际移动的数量
- *     - 因"目标标签就是源标签"被跳过的数量
- *     - 因"目标标签中已有相同文本"被跳过的数量
+ * 【本轮重构 · 分类分组接线】
+ *   openSelectTagModal 新增 categories 参数，使候选标签按分类分组显示。
  */
 async function handleBatchMove() {
     const selectedIds = getSelectedStatementIds();
@@ -1086,13 +1103,14 @@ async function handleBatchMove() {
         title: '移动选中语句到标签',
         tags: candidateTags,
         counts: counts,
+        // 【本轮新增】传递分类列表，触发分组渲染
+        categories: vault.categories,
         excludeTagId: null
     });
     if (!result) return;
 
     const targetTagId = result.tagId;
 
-    // 【R5 防御】检查目标标签是否存在
     const targetTag = vault.tags.find(function (tag) {
         return tag.id === targetTagId;
     });
@@ -1158,7 +1176,6 @@ async function handleBatchMove() {
     }
 
     // ---------- 分支 b：执行移动 ----------
-    // 先清空选中（不触发渲染），再 dispatch（触发一次渲染）
     clearStatementSelection(false);
 
     dispatch('batchMoveStatements', {
@@ -1166,7 +1183,6 @@ async function handleBatchMove() {
         targetTagId: targetTagId
     });
 
-    // 显式更新批量栏，确保 UI 状态与数据强一致
     updateBatchBar({
         selectedCount: 0,
         allSelected: false
@@ -1193,7 +1209,6 @@ async function handleBatchMove() {
  * 添加语句到底部输入区。
  *
  * 【M4 修复】延迟滚动的上下文校验扩展为四元组。
- *
  * 【P1-N2 修复】使用 dispatch 返回值判断命令是否真的执行。
  */
 function handleAddStatement(text) {
@@ -1210,7 +1225,6 @@ function handleAddStatement(text) {
         return;
     }
 
-    // 记录添加时的上下文快照（四元组）
     const scrollContextAtAddTime = {
         tagId: currentTagId,
         searchScope: vault.uiState.searchScope,
@@ -1235,7 +1249,6 @@ function handleAddStatement(text) {
         const latestVault = getVaultSnapshot();
         if (!latestVault || !latestVault.uiState) return;
 
-        // 若上下文已改变，跳过滚动，避免滚错标签 / 滚错可见集
         if (latestVault.uiState.currentTagId !== scrollContextAtAddTime.tagId) return;
         if (latestVault.uiState.searchScope !== scrollContextAtAddTime.searchScope) return;
         if (latestVault.uiState.searchKeyword !== scrollContextAtAddTime.searchKeyword) return;
@@ -1254,12 +1267,6 @@ function handleAddStatement(text) {
  * 使用屏幕外绝对定位（非 display: none）。
  *
  * 【C3 修复】补全导出字段。
- *   exportData 现完整包含 tags / statementsMap / recycleBin /
- *   uiState / settings 五个字段，与 Vault 顶层结构一一对应。
- *
- * 【本次重构说明】
- *   exportData 新增 categories 字段（与 Vault 顶层结构对齐）。
- *   从 exportData 导入时，normalizeVault 会正确处理 categories。
  */
 async function handleExport() {
     const vault = getVaultSnapshot();
@@ -1288,7 +1295,6 @@ async function handleExport() {
         + '_tags' + vault.tags.length
         + '_items' + totalStatements + '.json';
 
-    // 挂载到 DOM 且保持可渲染（屏幕外定位）
     downloadLink.style.position = 'absolute';
     downloadLink.style.left = '-9999px';
     downloadLink.style.top = '0';
@@ -1299,10 +1305,8 @@ async function handleExport() {
 
     downloadLink.click();
 
-    // 立即从 DOM 移除（click 已同步触发下载启动）
     document.body.removeChild(downloadLink);
 
-    // 延迟释放 ObjectURL，确保下载已启动
     setTimeout(function () {
         URL.revokeObjectURL(objectUrl);
     }, 1000);
@@ -1313,7 +1317,6 @@ async function handleExport() {
 async function handleImport(file) {
     if (!file) return;
 
-    // 文件大小上限校验，防止超大文件阻塞主线程
     if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
         const fileSizeInMegabytes = (file.size / 1024 / 1024).toFixed(1);
         const limitInMegabytes = (MAX_IMPORT_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0);
@@ -1346,7 +1349,6 @@ async function handleImport(file) {
         }
     };
 
-    // 【R3 修复】处理文件读取失败
     reader.onerror = function (readErrorEvent) {
         console.error('[main] FileReader 读取失败:', readErrorEvent);
         showMessage('读取文件失败，请重试', true);
@@ -1356,8 +1358,7 @@ async function handleImport(file) {
 }
 
 /**
- * 旧格式（纯数组）导入：一次性批处理，避免逐条 dispatch 触发 N 次加密
- * @param {Array} parsedArray
+ * 旧格式（纯数组）导入
  */
 async function handleLegacyImport(parsedArray) {
     const confirmed = await showConfirmDialog(
@@ -1405,31 +1406,12 @@ async function handleLegacyImport(parsedArray) {
 }
 
 /**
- * 完整备份导入：归一化后整块替换
- *
- * 【P2-N1 修复】
- *   归一化步骤包入 try 块，异常时提前返回，
- *   不改变当前选中状态与 Vault。
- *
- * 【C3 / C4 修复】
- *   C3：从 parsedData 读取 recycleBin 与 settings 并传给
- *       normalizeVault，避免导入后回收站与用户偏好丢失。
- *   C4：replaceVault 的切片列表补 'recycleBin'，
- *       使更多菜单徽章计数随新数据同步刷新。
- *
- * 【本次重构说明】
- *   parsedData.categories 会被 normalizeVault 读取并归一化。
- *   若导入的是旧版本数据（无 categories 字段），
- *   normalizeVault 会自动创建"只含默认分类"的数组，
- *   所有旧标签自动归入"未分类"。用户升级后体验连续，无数据丢失。
- *
- * @param {Object} parsedData
+ * 完整备份导入
  */
 async function handleFullImport(parsedData) {
     const confirmed = await showConfirmDialog('导入完整备份将覆盖当前所有数据，确定吗？');
     if (!confirmed) return;
 
-    // ---------- 导入前的原始统计 ----------
     const originalTagCount = Array.isArray(parsedData.tags)
         ? parsedData.tags.length
         : 0;
@@ -1445,7 +1427,6 @@ async function handleFullImport(parsedData) {
         }
     }
 
-    // ---------- 归一化（包入 try，异常时提前返回） ----------
     let normalizedVault;
     try {
         normalizedVault = ensureDefaultTagExists(normalizeVault({
@@ -1462,7 +1443,6 @@ async function handleFullImport(parsedData) {
         return;
     }
 
-    // ---------- 归一化后的统计 ----------
     let normalizedStatementCount = 0;
     for (const tagId of Object.keys(normalizedVault.statementsMap)) {
         normalizedStatementCount += normalizedVault.statementsMap[tagId].length;
@@ -1477,24 +1457,19 @@ async function handleFullImport(parsedData) {
         originalStatementCount - normalizedStatementCount
     );
 
-    // 先清空选中（不触发重渲染，避免与 replaceVault 的重渲染竞争）
     clearStatementSelection(false);
 
-    // 整块替换：切片列表补 'recycleBin'
     replaceVault(normalizedVault, ['tags', 'statements', 'ui', 'recycleBin']);
 
-    // 显式更新批量栏，确保 UI 状态与数据强一致
     updateBatchBar({
         selectedCount: 0,
         allSelected: false
     });
 
-    // ---------- 结果提示 ----------
     let message = '导入成功：' + normalizedVault.categories.length + ' 个分类，'
         + normalizedVault.tags.length + ' 个标签，'
         + normalizedStatementCount + ' 条语句';
 
-    // 提示回收站条目数（若有）
     if (normalizedVault.recycleBin.length > 0) {
         message += '，回收站 ' + normalizedVault.recycleBin.length + ' 条';
     }
@@ -1515,9 +1490,6 @@ async function handleFullImport(parsedData) {
 
 /**
  * 重置全局
- *
- * 【C4 修复】replaceVault 的切片列表补 'recycleBin'，
- *   使更多菜单徽章计数与重置后的空回收站同步刷新。
  */
 async function handleReset() {
     const confirmed = await showConfirmDialog(
@@ -1531,10 +1503,8 @@ async function handleReset() {
 
     clearStatementSelection(false);
 
-    // 切片列表补 'recycleBin'
     replaceVault(presetVault, ['tags', 'statements', 'ui', 'recycleBin']);
 
-    // 显式更新批量栏，确保 UI 状态与数据强一致
     updateBatchBar({
         selectedCount: 0,
         allSelected: false
@@ -1547,17 +1517,10 @@ async function handleReset() {
 
 /**
  * 打开回收站面板
- *
- * 流程：
- *   1. 先 dispatch 清理过期条目（幂等：无过期时 Facade 会返回 false）
- *   2. 打开面板，传入最新数据拉取器与 handlers
  */
 async function handleOpenRecycleBin() {
-    // 1. 清理过期条目
-    //    幂等命令：若无过期条目，Facade 会返回 false，静默无副作用
     dispatch('cleanupExpiredRecycleBinItems', {});
 
-    // 2. 打开面板
     await openRecycleBinModal({
         getItems: function () {
             const vault = getVaultSnapshot();
@@ -1575,18 +1538,12 @@ async function handleOpenRecycleBin() {
     });
 }
 
-/**
- * 更多菜单 → 快捷键帮助
- */
 function handleOpenShortcutsHelp() {
     showMessage(
         '快捷键：Ctrl+K 搜索 · Ctrl+/ 新建 · Esc 关闭 · Delete 删除选中'
     );
 }
 
-/**
- * 更多菜单 → 设置
- */
 async function handleOpenSettings() {
     const vault = getVaultSnapshot();
     if (!vault || !vault.settings) {
@@ -1600,9 +1557,6 @@ async function handleOpenSettings() {
     });
 }
 
-/**
- * 更多菜单 → 关于
- */
 function handleOpenAbout() {
     showMessage(
         'DeepSeek 语句工坊 · 命令-查询分离架构 · AES-256-GCM 加密 · 本地存储'
@@ -1639,6 +1593,10 @@ function handleSettingsToggle(key, nextValue) {
 
 /**
  * 从回收站恢复单条
+ *
+ * 【本轮重构 · 分类分组接线】
+ *   当源标签已删除时，需要打开 select-tag 模态框选择目标标签。
+ *   此处新增 categories 参数，使标签按分类分组显示。
  */
 async function handleRecycleRestoreSingle(binId) {
     const vault = getVaultSnapshot();
@@ -1652,14 +1610,12 @@ async function handleRecycleRestoreSingle(binId) {
         return false;
     }
 
-    // 检查源标签是否仍然存在
     const sourceTag = binItem.sourceTagId
         ? vault.tags.find(function (tag) {
             return tag.id === binItem.sourceTagId;
         })
         : null;
 
-    // ---------- 情况 A：源标签仍然存在 → 直接恢复 ----------
     if (sourceTag) {
         const didRestore = dispatch('restoreStatementFromRecycleBin', {
             binId: binId,
@@ -1674,7 +1630,6 @@ async function handleRecycleRestoreSingle(binId) {
         return false;
     }
 
-    // ---------- 情况 B：源标签已删除 → 让用户选择目标标签 ----------
     if (vault.tags.length === 0) {
         showMessage('没有可用标签，无法恢复', true);
         return false;
@@ -1689,10 +1644,11 @@ async function handleRecycleRestoreSingle(binId) {
         title: '源标签已删除，选择恢复的目标标签',
         tags: vault.tags,
         counts: counts,
+        // 【本轮新增】传递分类列表，触发分组渲染
+        categories: vault.categories,
         excludeTagId: null
     });
     if (!result) {
-        // 用户取消：返回 false 让 modal 保留选中集
         return false;
     }
 
@@ -1719,6 +1675,9 @@ async function handleRecycleRestoreSingle(binId) {
 
 /**
  * 从回收站批量恢复
+ *
+ * 【本轮重构 · 分类分组接线】
+ *   openSelectTagModal 新增 categories 参数，使目标标签按分类分组显示。
  */
 async function handleRecycleRestoreBatch(binIds) {
     if (!Array.isArray(binIds) || binIds.length === 0) return false;
@@ -1731,7 +1690,6 @@ async function handleRecycleRestoreBatch(binIds) {
         return false;
     }
 
-    // 选择目标标签
     const counts = {};
     for (const tag of vault.tags) {
         counts[tag.id] = (vault.statementsMap[tag.id] || []).length;
@@ -1741,6 +1699,8 @@ async function handleRecycleRestoreBatch(binIds) {
         title: '选择批量恢复的目标标签',
         tags: vault.tags,
         counts: counts,
+        // 【本轮新增】传递分类列表，触发分组渲染
+        categories: vault.categories,
         excludeTagId: null
     });
     if (!result) {
@@ -1756,7 +1716,6 @@ async function handleRecycleRestoreBatch(binIds) {
         return false;
     }
 
-    // ---------- 预计算：将恢复 / 将跳过（冲突） ----------
     const idSet = new Set(binIds);
     const existingTexts = new Set(
         (vault.statementsMap[targetTagId] || []).map(function (item) {
@@ -1779,7 +1738,6 @@ async function handleRecycleRestoreBatch(binIds) {
         willRestoreCount++;
     }
 
-    // ---------- 全部冲突：无需 dispatch ----------
     if (willRestoreCount === 0) {
         showMessage(
             '未恢复任何语句：选中的 ' + binIds.length
@@ -1808,9 +1766,6 @@ async function handleRecycleRestoreBatch(binIds) {
     return true;
 }
 
-/**
- * 从回收站彻底删除单条
- */
 async function handleRecyclePurgeSingle(binId) {
     const vault = getVaultSnapshot();
     if (!vault || !Array.isArray(vault.recycleBin)) return false;
@@ -1823,7 +1778,6 @@ async function handleRecyclePurgeSingle(binId) {
         return false;
     }
 
-    // 按 codePoint 安全截断预览文本（避免断开 surrogate pair）
     const allCharacters = Array.from(binItem.text);
     const previewText = allCharacters.length > 40
         ? allCharacters.slice(0, 40).join('') + '...'
@@ -1848,9 +1802,6 @@ async function handleRecyclePurgeSingle(binId) {
     return false;
 }
 
-/**
- * 从回收站批量彻底删除
- */
 async function handleRecyclePurgeBatch(binIds) {
     if (!Array.isArray(binIds) || binIds.length === 0) return false;
 
@@ -1873,9 +1824,6 @@ async function handleRecyclePurgeBatch(binIds) {
     return false;
 }
 
-/**
- * 清空回收站
- */
 async function handleRecycleClearAll() {
     const vault = getVaultSnapshot();
     if (!vault || !Array.isArray(vault.recycleBin)) return false;
@@ -1900,9 +1848,6 @@ async function handleRecycleClearAll() {
 
 // ==================== 侧边栏滚动记忆 ====================
 
-/**
- * 从 sessionStorage 恢复侧边栏滚动位置
- */
 function restoreSidebarScrollState() {
     const sidebarTagsList = document.getElementById('sidebarTagsList');
     if (!sidebarTagsList) return;
@@ -1920,9 +1865,6 @@ function restoreSidebarScrollState() {
     }
 }
 
-/**
- * 绑定侧边栏滚动监听 + beforeunload 兜底保存
- */
 function bindSidebarScrollMemory() {
     const sidebarTagsList = document.getElementById('sidebarTagsList');
     let sidebarScrollTimer = null;
@@ -1944,7 +1886,6 @@ function bindSidebarScrollMemory() {
         }, { passive: true });
     }
 
-    // beforeunload：flush 待持久化的数据，减少丢失概率
     window.addEventListener('beforeunload', function () {
         flushDebouncedPersist();
         if (sidebarTagsList) {
